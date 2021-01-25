@@ -25,6 +25,7 @@ export const TimeSchema = new Schema({
     repeatEveryBlankWeeks: Boolean, // if true, repeatFrequency specifies number of weeks
     repeatDays: String, // "MTWRFSN" (Mon, Tues, Wed, thUrs, Fri, Sat, suN)
                         // which days to take medication
+                        // embedded schema?
     repeatFrequency: Number, // 1 = every week, 2 = every other week, ...
 
 });
