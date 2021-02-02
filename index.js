@@ -1,5 +1,5 @@
 import express from 'express';
-import routes from './src/routes/routes';
+import routes from './src/routes/Routes';
 import mongoose from 'mongoose';
 import bodyParser from 'body-parser';
 import jsonwebtoken from 'jsonwebtoken';
