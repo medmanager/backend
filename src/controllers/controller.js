@@ -58,3 +58,44 @@ export const getTimeFromTimeID = (req, res) => {
         res.json(time);
     });
 };
+
+export const fuzzySearchWithString = (req, res) => {
+    let respData = "";
+    https.request(
+            {
+                hostname: "api.fda.gov",
+                path: "/drug/drugsfda.json?limit=1000"
+            },
+            res2 => {
+                let data = ""
+
+                res2.on("data", d => {
+                    data += d;
+                })
+                res2.on("end", () => {
+                    respData = JSON.parse(data);
+                    var namesList = [];
+                    var i;
+                    for (i = 0; i < 1000; i++) {
+                        if (respData.results[i].products != undefined) {
+                            namesList.push(respData.results[i].products[0].brand_name);
+                        }
+                    }
+                    const fuse = new Fuse(namesList);
+                    let fuzzyResults = fuse.search(req.params.searchStr);
+                    let topResults = [];
+                    let j = 0;
+                    while (topResults.length < 5) {
+                        if (topResults.includes(fuzzyResults[j].item)) {
+                            j++;
+                        } else {
+                            topResults.push(fuzzyResults[j].item);
+                            j++;
+                        }
+                    }
+                    res.send(topResults);
+                })
+            }
+        )
+        .end();
+};

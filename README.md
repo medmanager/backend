@@ -19,3 +19,5 @@ Note that you can change the PORT in index.js
 Download Postman here to test the API: https://www.postman.com/downloads/
 
 Much of the current code outlines this tutorial: https://www.linkedin.com/learning/building-restful-apis-with-node-js-and-express/
+
+Creating secure user credentials tutorial: https://www.linkedin.com/learning/node-js-securing-restful-apis-2/
