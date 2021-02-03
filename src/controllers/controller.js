@@ -60,42 +60,36 @@ export const getTimeFromTimeID = (req, res) => {
 };
 
 export const fuzzySearchWithString = (req, res) => {
-    let respData = "";
-    https.request(
-            {
-                hostname: "api.fda.gov",
-                path: "/drug/drugsfda.json?limit=1000"
-            },
-            res2 => {
-                let data = ""
+    let searchStr = req.params.searchStr;
+    console.log('REST/spellingsuggestions.json?name=' + searchStr);
 
-                res2.on("data", d => {
-                    data += d;
-                })
-                res2.on("end", () => {
-                    respData = JSON.parse(data);
-                    var namesList = [];
-                    var i;
-                    for (i = 0; i < 1000; i++) {
-                        if (respData.results[i].products != undefined) {
-                            namesList.push(respData.results[i].products[0].brand_name);
-                        }
-                    }
-                    const fuse = new Fuse(namesList);
-                    let fuzzyResults = fuse.search(req.params.searchStr);
-                    let topResults = [];
-                    let j = 0;
-                    while (topResults.length < 5) {
-                        if (topResults.includes(fuzzyResults[j].item)) {
-                            j++;
-                        } else {
-                            topResults.push(fuzzyResults[j].item);
-                            j++;
-                        }
-                    }
-                    res.send(topResults);
-                })
-            }
-        )
-        .end();
+    const req2 = https.request(
+        {
+            hostname: 'rxnav.nlm.nih.gov', 
+            path: '/REST/spellingsuggestions.json?name=' + searchStr //append searchStr to path
+        }, res2 => {
+            let data = "";
+            res2.on('data', d => {
+                data += d;
+            });
+            res2.on('end', () => {
+                let respData = JSON.parse(data);
+                let matches = [];
+                let length = respData.suggestionGroup.suggestionList.suggestion.length;
+                //max length to return is 5
+                length = length < 5 ? length : 5;
+                let i;
+                for (i = 0; i < length; i++) {
+                    matches.push(respData.suggestionGroup.suggestionList.suggestion[i]);
+                }
+                //We could just return respData.suggestionGroup.suggestionList...
+                //but if we want to do any further searching on the matches, it
+                //is easier if they are in an accessible array
+                res.json(matches);
+            });
+        });
+    req2.on('error', error => {
+        res.send(error);
+    })
+    req2.end();
 };
