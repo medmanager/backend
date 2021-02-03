@@ -22,6 +22,10 @@ export const MedicationSchema = new Schema({
         type: Number,
         required: true
     },
+    amountUnit: {
+        type: String,
+        required: true
+    },
     frequency: {
         type: FrequencySchema,
         required: true
