@@ -44,6 +44,5 @@ export const FrequencySchema = new Schema({
     },
     weekdays: {
         type: WeekdaySchema,
-        required: true
     }
 });
