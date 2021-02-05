@@ -2,8 +2,8 @@ import mongoose from 'mongoose';
 
 const Schema = mongoose.Schema;
 
-export const TimeSchema = new Schema({
-    medicationAmount: {
+export const DosageSchema = new Schema({
+    dose: {
         type: Number,
         default: 1
     },
