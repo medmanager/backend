@@ -14,18 +14,6 @@ app.route('/medication/:medicationID')
    .put(loginRequired, updateMedicationFromID)
    .delete(loginRequired, deleteMedicationFromID);
 
-app.route('/medication/:medicationID/time')
-   //get update times of a specific medication
-   .get(loginRequired, getTimesFromMedicationID);
-   //TODO
-   //allow addition of a time
-
-app.route('/medication/time/:timeID')
-   .get(loginRequired, getTimeFromTimeID);
-   //TODO
-   //changes to a time
-   //deletion of a time
-
 app.route('/auth/register')
    .post(register);
    //register route
