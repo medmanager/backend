@@ -44,22 +44,6 @@ export const deleteMedicationFromID = (req, res) => {
     });
 };
 
-export const getTimesFromMedicationID = (req, res) => {
-    //{times: 1} ensures the function will only return the times for that medication
-    Medication.findById({_id: req.params.medicationID}, {times: 1},(err, times) => {
-        if (err) res.send(err);
-        res.json(times);
-    });
-};
-
-export const getTimeFromTimeID = (req, res) => {
-    //{times: {elemMatch...}} ensures the function will only return one time with the matching _id
-    Medication.find({"times._id":req.params.timeID}, {times : {$elemMatch: {"_id": req.params.timeID}}},(err, time) => {
-        if (err) res.send(err);
-        res.json(time);
-    });
-};
-
 export const fuzzySearchWithString = (req, res) => {
     let searchStr = req.params.searchStr;
     console.log('REST/spellingsuggestions.json?name=' + searchStr);
