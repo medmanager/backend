@@ -1,6 +1,6 @@
 import { addNewMedication, getMedications, 
     getMedicationFromID, updateMedicationFromID, deleteMedicationFromID,
-    getTimesFromMedicationID, getTimeFromTimeID, fuzzySearchWithString} from '../controllers/Controller'
+    getTimesFromMedicationID, getTimeFromTimeID, fuzzySearchWithString, deleteMedications} from '../controllers/Controller'
 import {login, register, loginRequired} from '../controllers/UserControllers'
 
 const routes = (app) => {
@@ -38,6 +38,11 @@ app.route('/medication/search/:searchStr')
    //currently we do not check for login
    //because search doesn't access a user's data
    .get(fuzzySearchWithString);
+
+   // MADE FOR DEBUGGING PURPOSES
+app.route('/deleteAll')
+   .delete(deleteMedications);
 };
+
 
 export default routes;

@@ -94,3 +94,13 @@ export const fuzzySearchWithString = (req, res) => {
     })
     req2.end();
 };
+
+//made for debugging purposes
+export const deleteMedications = (req, res) => {
+    Medication.remove({}, (err) => {
+        if (err) {
+            res.send(err);
+        }
+        res.json({ message: 'successfully deleted ALL medications'});
+    });
+};
