@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { MedicationSchema } from '../models/MedicationModel';
+import https from 'https';
 
 const Medication = mongoose.model('Medication', MedicationSchema);
 
@@ -92,4 +93,14 @@ export const fuzzySearchWithString = (req, res) => {
         res.send(error);
     })
     req2.end();
+};
+
+//made for debugging purposes
+export const deleteMedications = (req, res) => {
+    Medication.remove({}, (err) => {
+        if (err) {
+            res.send(err);
+        }
+        res.json({ message: 'successfully deleted ALL medications'});
+    });
 };

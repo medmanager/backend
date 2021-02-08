@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import {TimeSchema} from './TimeModel'
+import {DosageSchema} from './DosageModel'
 import {FrequencySchema} from './FrequencyModel'
 
 const Schema = mongoose.Schema;
@@ -10,11 +10,11 @@ export const MedicationSchema = new Schema({
         required: 'enter a medication name',
     },
     notes: String,
-    dosage: {
+    strength: {
         type: Number,
         required: true
     },
-    dosageUnit: {
+    strengthUnit: {
         type: String,
         required: true
     },
@@ -30,8 +30,8 @@ export const MedicationSchema = new Schema({
         type: FrequencySchema,
         required: true
     },
-    times: {
-        type: [TimeSchema],
+    dosages: {
+        type: [DosageSchema],
         required: true
     },
     dateAdded: {
