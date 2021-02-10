@@ -1,12 +1,20 @@
 import mongoose from 'mongoose';
 import { MedicationSchema } from '../models/MedicationModel';
+import { UserSchema } from '../models/userModel';
 import https from 'https';
+import 'lodash';
 
 const Medication = mongoose.model('Medication', MedicationSchema);
+const User = mongoose.model('User', UserSchema);
 
 // add a new medication
 export const addNewMedication = (req, res) => {
     let newMedication = new Medication(req.body);
+    let relevantUser = User.findById(req.params.userID, (err, user) => {
+        if (err) res.send(err);
+        res.json(user);
+    });
+    relevantUser.medications.push(newMedication);
 
     newMedication.save((err, medication) => {
         if (err) res.send(err);
@@ -15,19 +23,22 @@ export const addNewMedication = (req, res) => {
 };
 
 export const getMedications = (req, res) => {
-    Medication.find({}, (err, medications) => {
+    Medication.find({ userID: req.params.userID }, (err, medications) => {
         if (err) res.send(err);
         res.json(medications);
     });
 };
 
-export const getMedicationFromID = (req, res) => {
-    Medication.findById(req.params.medicationID, (err, medication) => {
-        if (err) res.send(err);
-        res.json(medication);
-    });
-};
+// Potentially useful in the future? This method should work if implemented as is, just not sure if it's necessary
+//
+// export const getMedicationFromID = (req, res) => {
+//     Medication.findById(req.params.medicationID, (err, medication) => {
+//         if (err) res.send(err);
+//         res.json(medication);
+//     });
+// };
 
+// Should still work as is
 export const updateMedicationFromID = (req, res) => {
     Medication.findOneAndUpdate({_id: req.params.medicationID}, req.body, {new: true, useFindAndModify: false}, (err, medication) => {
         if (err) res.send(err);
@@ -35,7 +46,19 @@ export const updateMedicationFromID = (req, res) => {
     });
 };
 
+// Should still work as is
 export const deleteMedicationFromID = (req, res) => {
+    let relevantUser = User.findById(req.params.userID, (err, user) => {
+        if (err) res.send(err);
+        res.json(user);
+    });
+    let relevantMedication = Medication.findById(req.params.medicationID, (err, user) => {
+        if (err) res.send(err);
+        res.json(medication);
+    });
+    relevantUser.medications = _.remove(relevantUser.medications, {
+        dateAdded: relevantMedication.dateAdded
+    });
     Medication.remove({_id: req.params.medicationID}, (err, medication) => {
         if (err) {
             res.send(err);

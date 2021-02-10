@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcrypt';
+import { MedicationSchema } from '../models/MedicationModel';
 
 const Schema = mongoose.Schema;
 
@@ -19,6 +20,10 @@ export const UserSchema = new Schema({
     created_date: {
         type: Date,
         default: Date.now
+    },
+    medications: {
+        type: [MedicationSchema],
+        default: []
     }
     
 });
