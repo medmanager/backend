@@ -38,4 +38,7 @@ export const MedicationSchema = new Schema({
         type: Date,
         default: Date.now,
     },
+    color: {
+        type: Number,
+    }
 });
