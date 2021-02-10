@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcrypt';
 import { MedicationSchema } from '../models/MedicationModel';
+import { EventSchema } from '../models/eventModel';
 
 const Schema = mongoose.Schema;
 
@@ -24,8 +25,11 @@ export const UserSchema = new Schema({
     medications: {
         type: [MedicationSchema],
         default: []
+    },
+    currentEvents: {
+        type: [EventSchema],
+        default: []
     }
-    
 });
 
 UserSchema.methods.comparePassword = (password, hashPassword) => {
