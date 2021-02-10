@@ -31,12 +31,12 @@ export const getMedications = (req, res) => {
 
 // Potentially useful in the future? This method should work if implemented as is, just not sure if it's necessary
 //
-// export const getMedicationFromID = (req, res) => {
-//     Medication.findById(req.params.medicationID, (err, medication) => {
-//         if (err) res.send(err);
-//         res.json(medication);
-//     });
-// };
+export const getMedicationFromID = (req, res) => {
+    Medication.findById(req.params.medicationID, (err, medication) => {
+        if (err) res.send(err);
+        res.json(medication);
+    });
+};
 
 // Should still work as is
 export const updateMedicationFromID = (req, res) => {
