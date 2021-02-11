@@ -1,4 +1,5 @@
 import express from 'express';
+import session from 'express-session';
 import routes from './src/routes/Routes';
 import mongoose from 'mongoose';
 import bodyParser from 'body-parser';
@@ -18,10 +19,21 @@ mongoose.connect('mongodb://localhost/MedManagerdb', {
 app.use(bodyParser.urlencoded({extended:true}));
 app.use(bodyParser.json());
 
+app.use(session({
+    key: 'user_sid',
+    secret: 'somerandonstuffs',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        expires: 600000
+    }
+}));
+
 // JWT setup
 app.use((req, res, next) => {
     if (req.headers && req.headers.authorization && req.headers.authorization.split(' ')[0] === 'JWT') {
         jsonwebtoken.verify(req.headers.authorization.split(' ')[1], 'ATLBANANA', (err, decode) => {
+            // console.log(decode);
             if (err) req.user = undefined;
             req.user = decode;
             next();

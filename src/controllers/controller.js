@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import { MedicationSchema } from '../models/MedicationModel';
 import { UserSchema } from '../models/userModel';
 import https from 'https';
-import 'lodash';
+import _ from 'lodash';
 
 const Medication = mongoose.model('Medication', MedicationSchema);
 const User = mongoose.model('User', UserSchema);
@@ -11,60 +11,108 @@ const User = mongoose.model('User', UserSchema);
 export const addNewMedication = (req, res) => {
     let newMedication = new Medication(req.body);
     let relevantUser = User.findById(req.params.userID, (err, user) => {
-        if (err) res.send(err);
-        res.json(user);
+        if (err) {
+            res.send(err);
+        } else {
+            user.medications.push(newMedication);
+            user.save((err, user) => {
+                newMedication.save((err, medication) => {
+                    if (err) {
+                        res.send(err);
+                    } else {
+                        res.json(medication);
+                    }
+                });
+            });
+        }
     });
-    relevantUser.medications.push(newMedication);
-
-    newMedication.save((err, medication) => {
-        if (err) res.send(err);
-        res.json(medication);
-    });
+    
 };
 
 export const getMedications = (req, res) => {
-    Medication.find({ userID: req.params.userID }, (err, medications) => {
-        if (err) res.send(err);
-        res.json(medications);
+    User.findOne({ _id: req.params.userID }, (err, user) => {
+        if (err) {
+            res.send(err);
+        } else {
+            res.send(user.medications);
+        }
     });
+    // User.findById(req.params.userID, (err, user) => {
+    //     if (err) {
+    //         res.send(err);
+    //     } else {
+    //         res.json(user);
+    //     }
+        
+    // });
 };
 
-// Potentially useful in the future? This method should work if implemented as is, just not sure if it's necessary
-//
+//Potentially useful in the future? This method should work if implemented as is, just not sure if it's necessary
+
 export const getMedicationFromID = (req, res) => {
     Medication.findById(req.params.medicationID, (err, medication) => {
-        if (err) res.send(err);
-        res.json(medication);
+        if (err) {
+            res.send(err);
+        } else {
+            res.send(medication);
+        }
     });
 };
 
 // Should still work as is
 export const updateMedicationFromID = (req, res) => {
     Medication.findOneAndUpdate({_id: req.params.medicationID}, req.body, {new: true, useFindAndModify: false}, (err, medication) => {
-        if (err) res.send(err);
-        res.json(medication);
+        if (err) {
+            res.send(err);
+        } else {
+            res.json(medication);
+        }
     });
 };
 
 // Should still work as is
 export const deleteMedicationFromID = (req, res) => {
+    // console.log("swag zone"); ultra helpful debugging string
     let relevantUser = User.findById(req.params.userID, (err, user) => {
-        if (err) res.send(err);
-        res.json(user);
-    });
-    let relevantMedication = Medication.findById(req.params.medicationID, (err, user) => {
-        if (err) res.send(err);
-        res.json(medication);
-    });
-    relevantUser.medications = _.remove(relevantUser.medications, {
-        dateAdded: relevantMedication.dateAdded
-    });
-    Medication.remove({_id: req.params.medicationID}, (err, medication) => {
         if (err) {
             res.send(err);
+        } else {
+            let relevantMedication = Medication.findById(req.params.medicationID, (err, user) => {
+                if (err) {
+                    res.send(err);
+                }
+            });
+            user.medications.splice(user.medications.indexOf(relevantMedication));
+            user.save((err, user) => {
+                if (err) {
+                    res.send(err);
+                } else {
+                    Medication.remove({_id: req.params.medicationID}, (err, medication) => {
+                        if (err) {
+                            res.send(err);
+                        }
+                        res.json({ message: 'successfully deleted medication'});
+                    });
+                }
+            })
         }
-        res.json({ message: 'successfully deleted medication'});
     });
+    // let relevantMedication = Medication.findById(req.params.medicationID, (err, user) => {
+    //     if (err) {
+    //         res.send(err);
+    //     } else {
+    //         res.json(medication);
+    //     }
+    // });
+    // relevantUser.medications = _.remove(relevantUser.medications, {
+    //     dateAdded: relevantMedication.dateAdded
+    // });
+    // Medication.remove({_id: req.params.medicationID}, (err, medication) => {
+    //     if (err) {
+    //         res.send(err);
+    //     }
+    //     res.json({ message: 'successfully deleted medication'});
+    // });
 };
 
 export const fuzzySearchWithString = (req, res) => {

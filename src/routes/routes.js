@@ -1,18 +1,22 @@
 import { addNewMedication, getMedications, 
     getMedicationFromID, updateMedicationFromID, deleteMedicationFromID,
-    fuzzySearchWithString, deleteMedications} from '../controllers/Controller'
+    getTimesFromMedicationID, getTimeFromTimeID, fuzzySearchWithString, deleteMedications} from '../controllers/Controller'
 import {login, register, loginRequired} from '../controllers/UserControllers'
 
 const routes = (app) => {
-app.route('/medication')
+
+app.route('/medication/:userID')
+   .get(loginRequired, getMedications)
    .post(loginRequired, addNewMedication)
-   .get(loginRequired, getMedications);
+   .delete(loginRequired, deleteMedicationFromID);
+
+app.route('/medication/:userID/:medicationID')
+   .delete(loginRequired, deleteMedicationFromID);
 
 app.route('/medication/:medicationID')
    //get a specific medication from ID
    .get(loginRequired, getMedicationFromID)
-   .put(loginRequired, updateMedicationFromID)
-   .delete(loginRequired, deleteMedicationFromID);
+   .put(loginRequired, updateMedicationFromID);
 
 app.route('/auth/register')
    .post(register);
