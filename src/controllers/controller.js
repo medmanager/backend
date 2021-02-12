@@ -97,22 +97,6 @@ export const deleteMedicationFromID = (req, res) => {
             })
         }
     });
-    // let relevantMedication = Medication.findById(req.params.medicationID, (err, user) => {
-    //     if (err) {
-    //         res.send(err);
-    //     } else {
-    //         res.json(medication);
-    //     }
-    // });
-    // relevantUser.medications = _.remove(relevantUser.medications, {
-    //     dateAdded: relevantMedication.dateAdded
-    // });
-    // Medication.remove({_id: req.params.medicationID}, (err, medication) => {
-    //     if (err) {
-    //         res.send(err);
-    //     }
-    //     res.json({ message: 'successfully deleted medication'});
-    // });
 };
 
 export const fuzzySearchWithString = (req, res) => {

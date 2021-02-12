@@ -1,9 +1,10 @@
 import express from 'express';
-import session from 'express-session';
 import routes from './src/routes/Routes';
 import mongoose from 'mongoose';
 import bodyParser from 'body-parser';
 import jsonwebtoken from 'jsonwebtoken';
+import * as cron from 'node-cron';
+import { medicationCheck } from './src/controllers/cronController';
 
 const app = express();
 const PORT = 4000; //to run local
@@ -19,16 +20,6 @@ mongoose.connect('mongodb://localhost/MedManagerdb', {
 app.use(bodyParser.urlencoded({extended:true}));
 app.use(bodyParser.json());
 
-app.use(session({
-    key: 'user_sid',
-    secret: 'somerandonstuffs',
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-        expires: 600000
-    }
-}));
-
 // JWT setup
 app.use((req, res, next) => {
     if (req.headers && req.headers.authorization && req.headers.authorization.split(' ')[0] === 'JWT') {
@@ -42,6 +33,11 @@ app.use((req, res, next) => {
         req.user = undefined;
         next();
     }
+});
+
+// automatically calls medicationCheck() at midnight every day
+cron.schedule("0 0 * * *", () => {
+    medicationCheck();
 })
 
 routes(app);

@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 
 const Schema = mongoose.Schema;
 
-export const eventSchema = new Schema({
+export const EventSchema = new Schema({
     medicationID: {
         type: String,
         required: true
@@ -16,7 +16,7 @@ export const eventSchema = new Schema({
         required: true
     },
     isTaken: {
-        type: boolean,
+        type: Boolean,
         default: false
     }
 });
