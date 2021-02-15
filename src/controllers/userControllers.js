@@ -44,3 +44,17 @@ export const login = (req, res) => {
         }
     })
 }
+
+//verifies if the given token (as a param) is a valid token
+export const verify = (req, res) => {
+    let token = req.params.token;
+    jwt.verify(token, 'ATLBANANA', (err, verifiedJwt) => {
+        if (err) {
+            res.send({isValid: false})
+        } else {
+            //verifiedJwt contains the user's email and the user's id
+            //that the given token is associated with
+            res.send({isValid: true, verifiedJwt: verifiedJwt});
+        }
+    })
+}
