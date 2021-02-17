@@ -36,9 +36,10 @@ app.use((req, res, next) => {
 });
 
 // automatically calls medicationCheck() at midnight every day
-cron.schedule("0 0 * * *", () => {
+let task = cron.schedule("0 0 * * *", () => {
     medicationCheck();
-})
+});
+console.log(task); // can use the task object to destroy task at a later time
 
 routes(app);
 

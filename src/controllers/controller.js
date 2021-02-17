@@ -1,8 +1,10 @@
 import mongoose from 'mongoose';
 import { MedicationSchema } from '../models/MedicationModel';
 import { UserSchema } from '../models/userModel';
+import { sendNotification } from '../controllers/cronController';
 import https from 'https';
 import _ from 'lodash';
+import * as cron from 'node-cron';
 
 const Medication = mongoose.model('Medication', MedicationSchema);
 const User = mongoose.model('User', UserSchema);
@@ -15,6 +17,17 @@ export const addNewMedication = (req, res) => {
             res.send(err);
         } else {
             user.medications.push(newMedication);
+            let arr = [];
+            for (var day in newMedication.frequency.weekdays) {
+                // console.log(newMedication.frequency.weekdays[day]);
+                let i;
+                for (i = 0; i < newMedication.frequency.interval; i++) {
+                    arr.push(`* ${9 + i * 8 / newMedication.frequency.interval} * * ${day}`);
+                }
+                arr.forEach((time, index) => {
+                    cron.schedule(time, sendNotification);
+                });
+            }
             user.save((err, user) => {
                 newMedication.save((err, medication) => {
                     if (err) {

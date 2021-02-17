@@ -14,17 +14,13 @@ export const medicationCheck = () => {
             console.log(err);
         } else {
             users.forEach((user, index) => {
-                console.log(user.username);
-                console.log(index);
                 if (user.medications.length != user.currentEvents.length) {
-                    console.log("OH SHIT");
                     let newEvent = new Event({
                        "timestamp": 1,
                        "reminderTime": 1, 
                        "medicationID": "7"
                     });
                     user.currentEvents.push(newEvent);
-                    console.log(user.currentEvents);
                     user.save((err, user) => {
                         if (err) {
                             console.log(err);
@@ -34,4 +30,8 @@ export const medicationCheck = () => {
             })
         }
     })
+}
+
+export const sendNotification = () => {
+    console.log('take your medication noob');
 }
