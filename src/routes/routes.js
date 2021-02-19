@@ -18,6 +18,9 @@ app.route('/medication/:medicationID')
    .get(loginRequired, getMedicationFromID)
    .put(loginRequired, updateMedicationFromID);
 
+app.route('/medication/confirm/:userID')
+   .post(loginRequired, confirmMedication);
+
 app.route('/auth/register')
    .post(register);
    //register route

@@ -156,3 +156,19 @@ export const deleteMedications = (req, res) => {
         res.json({ message: 'successfully deleted ALL medications'});
     });
 };
+
+export const confirmMedication = (req, res) => {
+    let newEvent = new Event(req.body);
+    let relevantUser = User.findById(req.params.userID, (err, user) => {
+        if (err) {
+            res.send(err);
+        } else {
+            user.currentEvents.push(newEvent);
+            user.save((err, user) => {
+                if (err) {
+                    res.send(err);
+                }
+            });
+        }
+    });
+}
