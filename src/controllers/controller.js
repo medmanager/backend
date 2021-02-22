@@ -8,15 +8,18 @@ import * as cron from 'node-cron';
 
 const Medication = mongoose.model('Medication', MedicationSchema);
 const User = mongoose.model('User', UserSchema);
+const Event = mongoose.model('Event', EventSchema);
 
 // add a new medication
 export const addNewMedication = (req, res) => {
     let newMedication = new Medication(req.body);
+    newMedication.updateEvents();
     let relevantUser = User.findById(req.params.userID, (err, user) => {
         if (err) {
             res.send(err);
         } else {
             user.medications.push(newMedication);
+            
             let arr = [];
             for (var day in newMedication.frequency.weekdays) {
                 // console.log(newMedication.frequency.weekdays[day]);
@@ -39,7 +42,6 @@ export const addNewMedication = (req, res) => {
             });
         }
     });
-    
 };
 
 export const getMedications = (req, res) => {

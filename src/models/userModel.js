@@ -35,3 +35,7 @@ export const UserSchema = new Schema({
 UserSchema.methods.comparePassword = (password, hashPassword) => {
     return bcrypt.compareSync(password, hashPassword);
 };
+
+UserSchema.methods.updateEvents = (medication) => {
+    let relevantMedication = Medication.findByID({ _id: medication.medicationID })
+}
