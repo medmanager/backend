@@ -36,6 +36,12 @@ UserSchema.methods.comparePassword = (password, hashPassword) => {
     return bcrypt.compareSync(password, hashPassword);
 };
 
-UserSchema.methods.updateEvents = (medication) => {
-    let relevantMedication = Medication.findByID({ _id: medication.medicationID })
+UserSchema.methods.updateEvents = (user, medication) => {
+    if (medication.frequency.intervalUnit == 'days') {
+        /* Implement by medication.frequency.interval as every * days with DosageSchema for times */
+    } else if (medication.frequency.intervalUnit == 'weeks') {
+        /* Use WeekdaySchema with DosageSchema times */
+    } else {
+        console.log('Issue with medication.frequency.intervalUnit');
+    }
 }
