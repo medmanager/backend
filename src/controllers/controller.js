@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { MedicationSchema } from '../models/MedicationModel';
 import { UserSchema } from '../models/userModel';
+import { EventSchema } from '../models/eventModel';
 import { sendNotification } from '../controllers/cronController';
 import https from 'https';
 import _ from 'lodash';
@@ -31,6 +32,7 @@ export const addNewMedication = (req, res) => {
                     cron.schedule(time, sendNotification);
                 });
             }
+
             user.save((err, user) => {
                 newMedication.save((err, medication) => {
                     if (err) {

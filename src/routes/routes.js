@@ -1,6 +1,7 @@
 import { addNewMedication, getMedications, 
     getMedicationFromID, updateMedicationFromID, deleteMedicationFromID,
-    getTimesFromMedicationID, getTimeFromTimeID, fuzzySearchWithString, deleteMedications} from '../controllers/Controller'
+    getTimesFromMedicationID, getTimeFromTimeID, fuzzySearchWithString, 
+    deleteMedications, confirmMedication } from '../controllers/Controller'
 import {login, register, loginRequired} from '../controllers/UserControllers'
 
 const routes = (app) => {

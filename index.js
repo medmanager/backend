@@ -39,7 +39,8 @@ app.use((req, res, next) => {
 let task = cron.schedule("0 0 * * *", () => {
     medicationCheck();
 });
-console.log(task); // can use the task object to destroy task at a later time
+
+// can use the task object to destroy task at a later time
 
 routes(app);
 
