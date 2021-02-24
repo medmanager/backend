@@ -59,13 +59,3 @@ export const verify = (req, res) => {
         }
     });
 }
-
-export const getUserFromToken = async (token) => {
-    return jwt.verify(token, 'ATLBANANA', (err, verifiedJwt) => {
-        if (err) {
-            return {error: true, message: "cannot find user from token"};
-        } else {
-            return {error: false, userId: verifiedJwt._id};
-        }
-    });
-}

@@ -3,13 +3,15 @@ import { MedicationSchema } from '../models/MedicationModel';
 import { UserSchema } from '../models/userModel';
 import https from 'https';
 import _ from 'lodash';
-import { getUserFromToken } from '../controllers/userControllers';
 
 const Medication = mongoose.model('Medication', MedicationSchema);
 const User = mongoose.model('User', UserSchema);
 
 // add a new medication
 export const addNewMedication = (req, res) => {
+    if (req.user == null) {
+        res.send({error: true, message: "token error: cannot find user from token!"});
+    }
     let newMedication = new Medication(req.body);
     User.findById(req.user, (err, user) => {
         if (err) {
@@ -31,7 +33,10 @@ export const addNewMedication = (req, res) => {
 };
 
 export const getMedications = (req, res) => {
-    User.findOne({ _id: req.params.userID }, (err, user) => {
+    if (req.user == null) {
+        res.send({error: true, message: "token error: cannot find user from token!"});
+    }
+    User.findOne({ _id: req.user }, (err, user) => {
         if (err) {
             res.send(err);
         } else {
@@ -51,6 +56,9 @@ export const getMedications = (req, res) => {
 //Potentially useful in the future? This method should work if implemented as is, just not sure if it's necessary
 
 export const getMedicationFromID = (req, res) => {
+    if (req.user == null) {
+        res.send({error: true, message: "token error: cannot find user from token!"});
+    }
     Medication.findById(req.params.medicationID, (err, medication) => {
         if (err) {
             res.send(err);
@@ -62,6 +70,9 @@ export const getMedicationFromID = (req, res) => {
 
 // Should still work as is
 export const updateMedicationFromID = (req, res) => {
+    if (req.user == null) {
+        res.send({error: true, message: "token error: cannot find user from token!"});
+    }
     Medication.findOneAndUpdate({_id: req.params.medicationID}, req.body, {new: true, useFindAndModify: false}, (err, medication) => {
         if (err) {
             res.send(err);
@@ -74,7 +85,10 @@ export const updateMedicationFromID = (req, res) => {
 // Should still work as is
 export const deleteMedicationFromID = (req, res) => {
     // console.log("swag zone"); ultra helpful debugging string
-    let relevantUser = User.findById(req.params.userID, (err, user) => {
+    if (req.user == null) {
+        res.send({error: true, message: "token error: cannot find user from token!"});
+    }
+    User.findById(req.params.userID, (err, user) => {
         if (err) {
             res.send(err);
         } else {
@@ -156,22 +170,57 @@ export const fuzzySearchWithString = (req, res) => {
  * 2 parameters in body:
  * @param startDate : DateTime object containing start date to find occurrences for
  * @param endDate : DateTime object marking the end date in the range of the occurrences
- * 
- * Function returns an array of days indexed from 0 (startDay) to (endDay - 1)
- * Inside each array, there are arrays of all the medications that are scheduled to be
- * taken that day. Inside the each medication object within the array, there is an array
- * that has the specific DateTime the medication needs to be taken. It also has the 
- * dosageId for future reference.
  */
 export const getOccurrences = async (req, res) => {
     let startDate;
     let endDate;
-    let token;
+    let userId;
 
-    token = req.params.token;
+    userId = req.user;
     startDate = req.body.startDate;
     endDate = req.body.endDate;
 
+    if (userId == null) {
+        res.send({error: true, message: "token invalid: cannot get user"});
+        return;
+    }
+    let user = await getUser(userId);
+    if (user.error) { 
+        res.send(user);
+        return;
+    }
+
+    let scheduledDays = getScheduledDays(user, startDate, endDate);
+
+    let orderedDays = [];
+
+    //order scheduled days by time instead of medication
+    scheduledDays.forEach(day => {
+        let orderMeds = [];
+        day.forEach(med => {
+            med.datesWTime.forEach(dose => {
+                let i = 0;
+                //find index in orderMeds to append new entry
+                while (i < orderMeds.length && dose.date.getTime() > orderMeds[i].date.getTime())
+                    i++;
+                orderMeds.splice(i, 0, {medicationId: med.medicationId, dosageId: dose.dosageId, date: dose.date});
+            });
+        });
+        //push ordered array to day index in orderedDays
+        orderedDays.push(orderMeds);
+    });
+
+    res.json(orderedDays);
+}
+
+/*
+* Function returns an array of days indexed from 0 (startDay) to (endDay - 1)
+* Inside each array, there are arrays of all the medications that are scheduled to be
+* taken that day. Inside the each medication object within the array, there is an array
+* that has the specific DateTime the medication needs to be taken. It also has the 
+* dosageId.
+*/
+const getScheduledDays = (user, startDate, endDate) => {
     //set end date to next saturday
     if (endDate == null) {
         endDate = new Date();
@@ -186,17 +235,6 @@ export const getOccurrences = async (req, res) => {
         //sunday is index 0 so subtract current day in millis
         startDate = new Date(startDate.getTime() - (day)*24*3600*1000);
     }
-
-    let verifyToken = await getUserFromToken(token);
-    if (verifyToken.error) {
-        res.send(verifyToken);
-        return;
-    }
-    let user = await getUser(verifyToken.userId);
-    if (user.error) { 
-        res.send(user);
-        return;
-    }
     let scheduledDays = [];
 
     //ceil both startDate and endDate to the endOfDay (avoids indexing issues later)
@@ -210,12 +248,8 @@ export const getOccurrences = async (req, res) => {
     days = Math.ceil(days / (1000 * 3600 * 24));
     //create entries in scheduledDays array for each day inbetween
     for(let x = 0; x <= days; x++) {
-        scheduledDays.push(new Array());
+        scheduledDays.push([]);
     }
-    if (user.medications[user.medications.length - 1].frequency.weekdays != null) {
-        console.log(user.medications[user.medications.length - 1].frequency.weekdays);
-    }
-    console.log(user.medications);
     user.medications.forEach(med => {
         let start = med.dateAdded;
         //get number of milliseconds between start date and end date
@@ -295,15 +329,14 @@ export const getOccurrences = async (req, res) => {
     //leaving prints for testing purposes
     scheduledDays.forEach(day => {
         day.forEach(date => {
-            console.log(date.id);
+            console.log(date.medicationId);
             date.datesWTime.forEach(dateWTime => {
                 console.log(dateWTime.date.toString());
                 console.log(dateWTime.dosageId);
             });
         });
     });
-    console.log(scheduledDays);
-    res.json(scheduledDays);
+    return scheduledDays;
 }
 
 /*async helper function to find a user to be used in getOccurrences */

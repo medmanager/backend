@@ -18,8 +18,8 @@ app.route('/medication/:medicationID')
    .get(loginRequired, getMedicationFromID)
    .put(loginRequired, updateMedicationFromID);
 
-app.route('/schedule/occurrences/:token')
-   .get(getOccurrences);
+app.route('/schedule/occurrences')
+   .get(loginRequired, getOccurrences);
 
 
 app.route('/auth/register')
