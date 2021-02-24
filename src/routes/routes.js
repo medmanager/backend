@@ -5,12 +5,12 @@ import {login, register, loginRequired, verify} from '../controllers/UserControl
 
 const routes = (app) => {
 
-app.route('/medication/:userID')
+app.route('/medication')
    .get(loginRequired, getMedications)
    .post(loginRequired, addNewMedication)
    .delete(loginRequired, deleteMedicationFromID);
 
-app.route('/medication/:userID/:medicationID')
+app.route('/medication/:medicationID')
    .delete(loginRequired, deleteMedicationFromID);
 
 app.route('/medication/:medicationID')
