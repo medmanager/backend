@@ -41,4 +41,8 @@ export const MedicationSchema = new Schema({
     color: {
         type: Number,
     },
+    active: {
+        type: Boolean,
+        default: true,
+    }
 });

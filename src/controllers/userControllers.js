@@ -3,7 +3,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import {UserSchema} from '../models/userModel';
 
-var User = mongoose.model('User', UserSchema);
+let User = mongoose.model('User', UserSchema);
 
 export const loginRequired = (req, res, next) => {
     if (req.user) {
@@ -57,5 +57,15 @@ export const verify = (req, res) => {
             //that the given token is associated with
             res.send({isValid: true, verifiedJwt: verifiedJwt});
         }
-    })
+    });
+}
+
+export const getUserFromToken = async (token) => {
+    return jwt.verify(token, 'ATLBANANA', (err, verifiedJwt) => {
+        if (err) {
+            return {error: true, message: "cannot find user from token"};
+        } else {
+            return {error: false, userId: verifiedJwt._id};
+        }
+    });
 }

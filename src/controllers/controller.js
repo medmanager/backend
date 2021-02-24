@@ -3,6 +3,7 @@ import { MedicationSchema } from '../models/MedicationModel';
 import { UserSchema } from '../models/userModel';
 import https from 'https';
 import _ from 'lodash';
+import { getUserFromToken } from '../controllers/userControllers';
 
 const Medication = mongoose.model('Medication', MedicationSchema);
 const User = mongoose.model('User', UserSchema);
@@ -148,6 +149,171 @@ export const fuzzySearchWithString = (req, res) => {
         res.send(error);
     })
     req2.end();
+};
+
+/**
+ * Function to get weekly occurrences of all medications
+ * 2 parameters in body:
+ * @param startDate : DateTime object containing start date to find occurrences for
+ * @param endDate : DateTime object marking the end date in the range of the occurrences
+ * 
+ * Function returns an array of days indexed from 0 (startDay) to (endDay - 1)
+ * Inside each array, there are arrays of all the medications that are scheduled to be
+ * taken that day. Inside the each medication object within the array, there is an array
+ * that has the specific DateTime the medication needs to be taken. It also has the 
+ * dosageId for future reference.
+ */
+export const getOccurrences = async (req, res) => {
+    let startDate;
+    let endDate;
+    let token;
+
+    token = req.params.token;
+    startDate = req.body.startDate;
+    endDate = req.body.endDate;
+
+    //set end date to next saturday
+    if (endDate == null) {
+        endDate = new Date();
+        let day = endDate.getDay();
+        //add remaining days in the week in millis
+        endDate = new Date(endDate.getTime() + ((6 - day)*24*3600*1000));
+    }
+    //set start date to last sunday (or today if today is sunday)
+    if (startDate == null) {
+        startDate = new Date();
+        let day = startDate.getDay();
+        //sunday is index 0 so subtract current day in millis
+        startDate = new Date(startDate.getTime() - (day)*24*3600*1000);
+    }
+
+    let verifyToken = await getUserFromToken(token);
+    if (verifyToken.error) {
+        res.send(verifyToken);
+        return;
+    }
+    let user = await getUser(verifyToken.userId);
+    if (user.error) { 
+        res.send(user);
+        return;
+    }
+    let scheduledDays = [];
+
+    //ceil both startDate and endDate to the endOfDay (avoids indexing issues later)
+    const daylen = 1000*60*60*24;
+    startDate = new Date(Math.floor(startDate.getTime() / daylen) * daylen + daylen - 1);
+    endDate = new Date(Math.floor(endDate.getTime() / daylen) * daylen + daylen - 1);
+
+    //get number of milliseconds between start date and end date
+    let days = endDate.getTime() - startDate.getTime();
+    //divide by number of milliseconds in one day and ceil
+    days = Math.ceil(days / (1000 * 3600 * 24));
+    //create entries in scheduledDays array for each day inbetween
+    for(let x = 0; x <= days; x++) {
+        scheduledDays.push(new Array());
+    }
+    if (user.medications[user.medications.length - 1].frequency.weekdays != null) {
+        console.log(user.medications[user.medications.length - 1].frequency.weekdays);
+    }
+    console.log(user.medications);
+    user.medications.forEach(med => {
+        let start = med.dateAdded;
+        //get number of milliseconds between start date and end date
+        let daysbetween = endDate.getTime() - start.getTime();
+        //divide by number of milliseconds in one day and ceil
+        daysbetween = Math.ceil(daysbetween / (1000 * 3600 * 24));
+        //start may not be startDate so create an offset
+        let offset = 0;
+        offset = startDate.getTime() - start.getTime();
+        offset = Math.floor(offset / (1000 * 3600 * 24));
+        //loop over days from start and only include them if they are after startDate
+        if (med.frequency.intervalUnit == "days") {
+            for (let i = 0; i < daysbetween; i+=med.frequency.interval) {
+                if ((daysbetween - i) > days + 1) {
+                    //day is before start so just continue looping
+                    continue;
+                }
+                let daysbetween_m = i * (1000*3600*24);
+                //find actual date to take medication
+                let dateToTake = new Date(start.getTime() + daysbetween_m);
+                //round down to 12 am
+                dateToTake.setHours(0,0,0,0);
+                let datesWTime = [];
+                med.dosages.forEach(dosage => {
+                    //get amount of millis to add to current dateToTake
+                    let millisToAdd = dosage.reminderTime.getHours() * 3600 * 1000;
+                    let dateWTime = new Date(dateToTake.getTime() + millisToAdd);
+                    datesWTime.push({date: dateWTime, dosageId: dosage._id})
+                });
+                if (datesWTime.length > 0) {
+                    scheduledDays[i - offset].push({datesWTime, medicationId: med._id});
+                }
+            }
+        } else {
+            //if the start of each week isn't Sunday, make it Sunday
+            let days_s = start.getDay();
+            if (days_s != 0) {
+                start = new Date(start.getTime() - days_s*(1000*3600*24)) 
+            }
+            //loop over weeks so multiply interval by 7
+            for (let i = 0; i < daysbetween; i+=7*med.frequency.interval) {
+                if ((daysbetween - i - 6) > days + 1) {
+                    //day is before start so continue looping
+                    continue;
+                }
+                //loop over each day of this week
+                for (let j = i; j < i+7; j++) {
+                    let daysbetween_m = i * (1000*3600*24);
+                    let dateToTake = new Date(start.getTime() + daysbetween_m);
+                    //this kind of sucks but we need to check if the weekday matches the current day
+                    //and the current weekday is set to true in the database for this med
+                    //we also need to make sure the date is in the day range too
+                    if ((med.frequency.weekdays.sunday && dateToTake.getDay() == 0)
+                        || (med.frequency.weekdays.monday && dateToTake.getDay() == 1)
+                        || (med.frequency.weekdays.tuesday && dateToTake.getDay() == 2)
+                        || (med.frequency.weekdays.wednesday && dateToTake.getDay() == 3)
+                        || (med.frequency.weekdays.thursday && dateToTake.getDay() == 4)
+                        || (med.frequency.weekdays.tuesday && dateToTake.getDay() == 5)
+                        || (med.frequency.weekdays.wednesday && dateToTake.getDay() == 6)
+                        && (daysbetween - j <= days)) {
+                        dateToTake.setHours(0,0,0,0);
+                        let datesWTime = [];
+                        med.dosages.forEach(dosage => {
+                            //get amount of millis to add to current dateToTake
+                            let millisToAdd = dosage.reminderTime.getHours() * 3600 * 1000;
+                            let dateWTime = new Date(dateToTake.getTime() + millisToAdd);
+                            datesWTime.push({date: dateWTime, dosageId: dosage._id})
+                        });
+                        if (datesWTime.length > 0) {
+                            scheduledDays[i - offset].push({datesWTime, medicationId: med._id});
+                        }
+                    }
+                }
+            }
+        }
+    });
+    //leaving prints for testing purposes
+    // scheduledDays.forEach(day => {
+    //     day.forEach(date => {
+    //         console.log(date.id);
+    //         date.datesWTime.forEach(dateWTime => {
+    //             console.log(dateWTime.date.toString());
+    //         });
+    //     });
+    // });
+    // console.log(scheduledDays);
+    res.json(scheduledDays);
+}
+
+/*async helper function to find a user to be used in getOccurrences */
+const getUser = async (userId) => {
+    return User.findById({_id: userId}, (err, user) => {
+        if (err) {
+            return {error: true, message: "cannot find user!"};
+        } else {
+            return {error: false, user};
+        }
+    });
 };
 
 //made for debugging purposes
