@@ -6,7 +6,6 @@ import * as cron from 'node-cron';
 
 const Schema = mongoose.Schema;
 
-const Medication = mongoose.model('Medication', MedicationSchema);
 const Event = mongoose.model('Event', EventSchema);
 
 export const UserSchema = new Schema({
@@ -40,62 +39,84 @@ UserSchema.methods.comparePassword = (password, hashPassword) => {
     return bcrypt.compareSync(password, hashPassword);
 };
 
-UserSchema.methods.updateEvents = (medication) => {
-    if (medication.frequency.intervalUnit == 'days') {
-        /* Implement by medication.frequency.interval as every * days with DosageSchema for times */
-        for (var dosage in medication.dosages) {
-            var newEvent = new Event({
-                medicationID : medication._id,
-                timestamp: Date.now(),
-                reminderTime: dosage.reminderTime,
-                isTaken: false,
-                job: cron.schedule(`${dosage.reminderTime.getMinutes()} ${dosage.reminderTime.getHours()} */${medication.frequency.interval} * ?`)
-            });
-            newEvent.save((err, event) => {
-                if (err) {
-                    console.log(err);
+/* createEvents creates an event for every time the medication has to be admitted (currently just for the upcoming week)
+   Params:
+   User passed in
+   Notes:
+   -The function runs on all medications for the user passed in
+   Future Implementation:
+   -'days' intervalUnit value
+   -Yearly updates instead of weekly
+*/
+UserSchema.methods.createEvents = () => {
+    for (var medication in self.medications) {
+        if (medication.frequency.intervalUnit == 'days') {
+            /* Idea for implementation: implement 'days' by saving the previous week's data */
+        } else if (medication.frequency.intervalUnit == 'weeks') {
+            for (day in medication.frequency.weekdays.keys()) {
+                if (medication.frequency.weekdays.day) {
+                    var newEvent = new Event({
+                        medicationID : medication._id,
+                        timestamp: Date.now(),
+                        reminderTime: dosage.reminderTime,
+                        reminderDay: day,
+                        isTaken: false,
+                    });
+                    newEvent.save((err, event) => {
+                        if (err) {
+                            console.log(err);
+                        }
+                    });
+                    self.currentEvents.push(newEvent);
+                    self.save((err, user) => {
+                        if (err) {
+                            console.log(err);
+                        }
+                    });
                 }
-            });
-            self.currentEvents.push(newEvent);
-            self.save((err, user) => {
-                if (err) {
-                    console.log(err);
-                }
-            });
-        } 
-    } else if (medication.frequency.intervalUnit == 'weeks') {
-        /* Use WeekdaySchema with DosageSchema times */
-        for (var dosage in medication.dosages) {
-            let isFirst = true;
-            for (var day in medication.frequency.weekdays.keys()) {
-                // this will be implemented after refactoring the weekday schema
-                // if ()
             }
-            var newEvent = new Event({
-                medicationID : medication._id,
-                timestamp: Date.now(),
-                reminderTime: dosage.reminderTime,
-                isTaken: false,
-                job: cron.schedule(`${dosage.reminderTime.getMinutes()} ${dosage.reminderTime.getHours()} */${medication.frequency.interval} * ?`)
-            });
-            newEvent.save((err, event) => {
-                if (err) {
-                    console.log(err);
-                }
-            });
-            self.currentEvents.push(newEvent);
+        } else {
+            console.log('Problem with self.frequency.intervalUnit');
         }
-    } else {
-        console.log('Issue with medication.frequency.intervalUnit');
     }
 }
 
+/* Destorys ALL events associated with a certain medication
+    Params:
+    -Medication whose events need to be destroyed
+    -User passed in
+    Notes:
+    -Removes the item from the user's currentEvents list and from the database
+    Future Implementation:
+    Check to make sure the medication is under the user?
+*/
 UserSchema.methods.destroyEventsByMedication = (medication) => {
     for (var event in self.currentEvents) {
         if (event.medicationID == medication._id) {
-            if (event.job != null) {
-                event.job.destroy();
-            }
+            self.currentEvents.slice(self.currentEvents.indexOf(event));
+            Event.findOneAndRemove({ id: event._id }, (err) => {
+                if (err) {
+                    console.log(err);
+                }
+            });
+        }
+    }
+    for (dosage in medication.dosages) {
+        if (dosage.job != null) {
+            dosage.job.destroy();
         }
     }
 }
+
+/* To be used in future implementation:
+var isFirst = true;
+var dayString = '';
+for (var day in self.frequency.weekdays.keys()) {
+    if (weekdays.day) {
+        if (isFirst) {
+            dayString.concat(day.slice(0, 3));
+        } else {
+            dayString.concat(',' + day.slice(0, 3));
+        }
+    }
+} */

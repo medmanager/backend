@@ -15,6 +15,10 @@ export const EventSchema = new Schema({
         type: Date,
         required: true
     },
+    reminderDate: {
+        type: Date,
+        required: true
+    },
     isTaken: {
         type: Boolean,
         default: false
