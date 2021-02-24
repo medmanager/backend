@@ -11,7 +11,7 @@ const User = mongoose.model('User', UserSchema);
 // add a new medication
 export const addNewMedication = (req, res) => {
     let newMedication = new Medication(req.body);
-    let relevantUser = User.findById(req.params.userID, (err, user) => {
+    User.findById(req.user, (err, user) => {
         if (err) {
             res.send(err);
         } else {
@@ -243,7 +243,7 @@ export const getOccurrences = async (req, res) => {
                     //get amount of millis to add to current dateToTake
                     let millisToAdd = dosage.reminderTime.getHours() * 3600 * 1000;
                     let dateWTime = new Date(dateToTake.getTime() + millisToAdd);
-                    datesWTime.push({date: dateWTime, dosageId: dosage._id})
+                    datesWTime.push({date: dateWTime, dosageId: dosage._id});
                 });
                 if (datesWTime.length > 0) {
                     scheduledDays[i - offset].push({datesWTime, medicationId: med._id});
@@ -273,8 +273,8 @@ export const getOccurrences = async (req, res) => {
                         || (med.frequency.weekdays.tuesday && dateToTake.getDay() == 2)
                         || (med.frequency.weekdays.wednesday && dateToTake.getDay() == 3)
                         || (med.frequency.weekdays.thursday && dateToTake.getDay() == 4)
-                        || (med.frequency.weekdays.tuesday && dateToTake.getDay() == 5)
-                        || (med.frequency.weekdays.wednesday && dateToTake.getDay() == 6)
+                        || (med.frequency.weekdays.friday && dateToTake.getDay() == 5)
+                        || (med.frequency.weekdays.saturday && dateToTake.getDay() == 6)
                         && (daysbetween - j <= days)) {
                         dateToTake.setHours(0,0,0,0);
                         let datesWTime = [];
@@ -293,15 +293,16 @@ export const getOccurrences = async (req, res) => {
         }
     });
     //leaving prints for testing purposes
-    // scheduledDays.forEach(day => {
-    //     day.forEach(date => {
-    //         console.log(date.id);
-    //         date.datesWTime.forEach(dateWTime => {
-    //             console.log(dateWTime.date.toString());
-    //         });
-    //     });
-    // });
-    // console.log(scheduledDays);
+    scheduledDays.forEach(day => {
+        day.forEach(date => {
+            console.log(date.id);
+            date.datesWTime.forEach(dateWTime => {
+                console.log(dateWTime.date.toString());
+                console.log(dateWTime.dosageId);
+            });
+        });
+    });
+    console.log(scheduledDays);
     res.json(scheduledDays);
 }
 
