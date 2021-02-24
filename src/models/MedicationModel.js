@@ -39,3 +39,14 @@ export const MedicationSchema = new Schema({
         default: Date.now,
     },
 });
+
+// Schedules a cron job to send notification 
+MedicationSchema.methods.scheduleDosage = (dosage) => {
+    if (dosage.sendReminder) {
+        if (self.frequency.intervalUnit == 'days') {
+            dosage.job = cron.schedule(`${dosage.reminderTime.getMinutes()} ${dosage.reminderTime.getHours()} */${medication.frequency.interval} * ?`);
+        } else if (self.frequency.intervalUnit == 'weeks') {
+            dosage.job = cron.schedule();
+        }
+    }
+}

@@ -57,6 +57,11 @@ UserSchema.methods.updateEvents = (medication) => {
                 }
             });
             self.currentEvents.push(newEvent);
+            self.save((err, user) => {
+                if (err) {
+                    console.log(err);
+                }
+            });
         } 
     } else if (medication.frequency.intervalUnit == 'weeks') {
         /* Use WeekdaySchema with DosageSchema times */

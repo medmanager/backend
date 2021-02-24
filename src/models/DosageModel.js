@@ -13,5 +13,9 @@ export const DosageSchema = new Schema({
     },
     reminderTime: {
         type: Date
+    },
+    job: {
+        type: Object,
+        required: false
     }
 });
