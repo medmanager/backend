@@ -1,7 +1,9 @@
-import mongoose from 'mongoose';
+import mongoose, { createConnection } from 'mongoose';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import {UserSchema} from '../models/userModel';
+//import * as cron from 'node-cron';
+import { setOccurrencesFor } from './cronController';
 
 let User = mongoose.model('User', UserSchema);
 
@@ -27,6 +29,7 @@ export const register = (req, res) => {
             return res.json({error: false, user});
         }
     });
+    
 }
 
 export const login = (req, res) => {
@@ -40,6 +43,8 @@ export const login = (req, res) => {
             if (!user.comparePassword(req.body.password, user.hashPassword)) {
                 res.status(401).json({error: true, message: 'Authentication failed. Invalid email or password.'});
             } else {
+                console.log(user);
+                setOccurrencesFor(user);
                 return res.json({error: false, token: jwt.sign({email: user.email, username: user.username, _id: user.id}, 'ATLBANANA')});
             }
         }

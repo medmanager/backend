@@ -1,11 +1,13 @@
 import mongoose from 'mongoose';
 import { MedicationSchema } from '../models/MedicationModel';
 import { UserSchema } from '../models/userModel';
+import { EventSchema } from '../models/eventModel';
 import https from 'https';
 import _ from 'lodash';
 
 const Medication = mongoose.model('Medication', MedicationSchema);
 const User = mongoose.model('User', UserSchema);
+const Event = mongoose.model('Event', EventSchema);
 
 // add a new medication
 export const addNewMedication = (req, res) => {
@@ -13,11 +15,25 @@ export const addNewMedication = (req, res) => {
         res.send({error: true, message: "token error: cannot find user from token!"});
     }
     let newMedication = new Medication(req.body);
-    User.findById(req.user, (err, user) => {
+    newMedication.updateEvents();
+    User.findById(req.params.userID, (err, user) => {
         if (err) {
             res.send(err);
         } else {
             user.medications.push(newMedication);
+            
+            // let arr = [];
+            // for (var day in newMedication.frequency.weekdays) {
+            //     // console.log(newMedication.frequency.weekdays[day]);
+            //     let i;
+            //     for (i = 0; i < newMedication.frequency.interval; i++) {
+            //         arr.push(`* ${9 + i * 8 / newMedication.frequency.interval} * * ${day}`);
+            //     }
+            //     arr.forEach((time, index) => {
+            //         cron.schedule(time, sendNotification);
+            //     });
+            // }
+
             user.save((err, user) => {
                 newMedication.save((err, medication) => {
                     if (err) {
@@ -29,7 +45,6 @@ export const addNewMedication = (req, res) => {
             });
         }
     });
-    
 };
 
 export const getMedications = (req, res) => {
@@ -88,7 +103,7 @@ export const deleteMedicationFromID = (req, res) => {
     if (req.user == null) {
         res.send({error: true, message: "token error: cannot find user from token!"});
     }
-    User.findById(req.params.userID, (err, user) => {
+    User.findById(req.user, (err, user) => {
         if (err) {
             res.send(err);
         } else {
@@ -112,22 +127,6 @@ export const deleteMedicationFromID = (req, res) => {
             })
         }
     });
-    // let relevantMedication = Medication.findById(req.params.medicationID, (err, user) => {
-    //     if (err) {
-    //         res.send(err);
-    //     } else {
-    //         res.json(medication);
-    //     }
-    // });
-    // relevantUser.medications = _.remove(relevantUser.medications, {
-    //     dateAdded: relevantMedication.dateAdded
-    // });
-    // Medication.remove({_id: req.params.medicationID}, (err, medication) => {
-    //     if (err) {
-    //         res.send(err);
-    //     }
-    //     res.json({ message: 'successfully deleted medication'});
-    // });
 };
 
 export const fuzzySearchWithString = (req, res) => {
@@ -209,7 +208,7 @@ export const getOccurrences = async (req, res) => {
         //push ordered array to day index in orderedDays
         orderedDays.push(orderMeds);
     });
-
+    
     res.json(orderedDays);
 }
 
@@ -248,9 +247,14 @@ const getScheduledDays = (user, startDate, endDate) => {
     let scheduledDays = [];
 
     //ceil both startDate and endDate to the endOfDay (avoids indexing issues later)
-    const daylen = 1000*60*60*24;
-    startDate = new Date(Math.floor(startDate.getTime() / daylen) * daylen + daylen - 1);
-    endDate = new Date(Math.floor(endDate.getTime() / daylen) * daylen + daylen - 1);
+    const daylen = 1000*3600*24;
+    startDate = new Date(startDate.getTime());
+    startDate.setHours(23,59,59,999);
+    endDate = new Date(endDate.getTime());
+    endDate.setHours(23,59,59,999);
+
+    console.log(startDate.toString());
+    console.log(endDate.toString());
 
     //get number of milliseconds between start date and end date
     let days = endDate.getTime() - startDate.getTime();
@@ -336,8 +340,10 @@ const getScheduledDays = (user, startDate, endDate) => {
             }
         }
     });
-    //leaving prints for testing purposes
+    //eaving prints for testing purposes
+    let i = 0;
     scheduledDays.forEach(day => {
+        console.log("day: " + i);
         day.forEach(date => {
             console.log(date.medicationId);
             date.datesWTime.forEach(dateWTime => {
@@ -345,6 +351,7 @@ const getScheduledDays = (user, startDate, endDate) => {
                 console.log(dateWTime.dosageId);
             });
         });
+        i++;
     });
     return scheduledDays;
 }

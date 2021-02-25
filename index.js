@@ -1,9 +1,9 @@
 import express from 'express';
-import session from 'express-session';
 import routes from './src/routes/Routes';
 import mongoose from 'mongoose';
 import bodyParser from 'body-parser';
 import jsonwebtoken from 'jsonwebtoken';
+import AllJobs from './src/server/AllJobs';
 
 const app = express();
 const PORT = 4000; //to run local
@@ -32,7 +32,11 @@ app.use((req, res, next) => {
         req.user = undefined;
         next();
     }
-})
+});
+
+//when server reloads we must schedule all of the jobs for our 
+//let allJobs = new AllJobs();
+//console.log(allJobs.allJobs);
 
 routes(app);
 
