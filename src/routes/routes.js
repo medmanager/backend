@@ -1,6 +1,6 @@
 import { addNewMedication, getMedications, 
     getMedicationFromID, updateMedicationFromID, deleteMedicationFromID,
-    fuzzySearchWithString, deleteMedications, getOccurrences} from '../controllers/controller'
+    fuzzySearchWithString, deleteMedications, getOccurrences, addOccurrence} from '../controllers/controller'
 import {login, register, loginRequired, verify} from '../controllers/UserControllers'
 
 const routes = (app) => {
@@ -19,7 +19,8 @@ app.route('/medication/:medicationID')
    .put(loginRequired, updateMedicationFromID);
 
 app.route('/schedule/occurrences')
-   .get(loginRequired, getOccurrences);
+   .get(loginRequired, getOccurrences)
+   .post(loginRequired, addOccurrence);
 
 
 app.route('/auth/register')

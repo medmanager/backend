@@ -213,6 +213,16 @@ export const getOccurrences = async (req, res) => {
     res.json(orderedDays);
 }
 
+/*function to post when a medication is taken */
+export const addOccurrence = (req, res) => {
+    if (req.user == null) {
+        res.send({error: true, message: "token error: cannot find user from token!"});
+    }
+    let user = req.user;
+    let occurrence = req.body.occurrence;
+    
+};
+
 /*
 * Function returns an array of days indexed from 0 (startDay) to (endDay - 1)
 * Inside each array, there are arrays of all the medications that are scheduled to be
