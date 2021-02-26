@@ -1,13 +1,14 @@
 import mongoose from 'mongoose';
 import { MedicationSchema } from '../models/MedicationModel';
 import { UserSchema } from '../models/userModel';
-import { EventSchema } from '../models/eventModel';
+import { DosageSchema } from '../models/DosageModel';
 import https from 'https';
 import _ from 'lodash';
 import { json } from 'body-parser';
 
 const Medication = mongoose.model('Medication', MedicationSchema);
 const User = mongoose.model('User', UserSchema);
+const Dosage = mongoose.model('Dosage', DosageSchema);
 
 // add a new medication
 export const addNewMedication = (req, res) => {
@@ -241,13 +242,34 @@ export const addOccurrence = (req, res) => {
     if (req.user == null) {
         res.send({error: true, message: "token error: cannot find user from token!"});
     }
-    let user = req.user;
+    let userId = req.user;
     let occurrence = req.body.occurrence;
-    return User.findById({_id: userId}, (err, user) => {
+    let dosageId = req.body.occurrence.dosageId;
+    let occurrenceToSave = {
+        _id: occurrenceId,
+        timeTaken: occurrence.timeTaken,
+        isTaken: occurrence.isTaken,
+        isComplete: true,
+    };
+
+    return Dosage.findById({_id: occurrence.id}, (err, dosage) => {
         if (err) {
-            return {error: true, message: "cannot find user!"};
+            res.send({error: true, message: "cannot find dosage!"});
         } else {
-            return {error: false, user};
+            //find the occurrence we need to update
+            let updated = false;
+            dosage.occurrences.forEach(occurrence => {
+                if (occurrence._id == occurrenceToSave._id) {
+                    occurrence = occurrenceToSave;
+                    updated = true;
+                }
+            });
+            if (!update) res.send({error: true, message: "occurrence doesn't exist!"});
+            dosage.save((err) => {
+                if (err) res.send({error: true, message: "occurrence cannot be saved!"});
+            });
+            //TODO: CANCEL NOTIFICATION
+            res.send({error: false});
         }
     });
 };

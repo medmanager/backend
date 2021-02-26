@@ -30,10 +30,8 @@ app.route('/auth/register')
    .post(register);
    //register route
 
-
 app.route('/auth/verify/:token')
    .get(verify)
-   
 
 app.route('/login')
    .post(login);

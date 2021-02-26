@@ -3,9 +3,6 @@ import mongoose from 'mongoose';
 const Schema = mongoose.Schema;
 
 const OccurrenceSchema = new Schema({
-    job: {
-        type: Object,
-    },
     isTaken: {
         type: Boolean,
     },
