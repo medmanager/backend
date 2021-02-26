@@ -34,19 +34,7 @@ export const medicationCheck = () => {
     })
 }
 
-/** schedule job to run every Sunday and store job in the user's schema */
-export const setOccurrencesFor = (user) => {
-    let time = "20 12 * * 4"; //run every week at the start of each Sunday
-    user.weeklyScheduler = cron.schedule(time, function() {
-        scheduleWeeklyOccurrences(user._id);
-    });
-    user.weeklyScheduler = {text:"this worked"};
-    user.save((err) => {
-        if (err) console.log(err);
-    });
-};
-
-function scheduleWeeklyOccurrences(userId) {
+export function scheduleWeeklyOccurrences(userId) {
     console.log(userId);
 };
 

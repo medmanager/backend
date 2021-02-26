@@ -281,7 +281,7 @@ export const addOccurrence = (req, res) => {
 * that has the specific DateTime the medication needs to be taken. It also has the 
 * dosageId.
 */
-const getScheduledDays = (user, startDate, endDate) => {
+export const getScheduledDays = (user, startDate, endDate) => {
     //set end date to next saturday
     if (endDate == null) {
         endDate = new Date();
@@ -361,6 +361,7 @@ const getScheduledDays = (user, startDate, endDate) => {
                 for (let j = i; j < i+7; j++) {
                     let daysbetween_m = (j - i) * (1000*3600*24);
                     let dateToTake = new Date(start.getTime() + daysbetween_m);
+                    dateToTake.setHours(23,59,59,999);
 
                     //this kind of sucks but we need to check if the weekday matches the current day
                     //and the current weekday is set to true in the database for this med
