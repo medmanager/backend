@@ -391,18 +391,18 @@ export const getScheduledDays = (user, startDate, endDate) => {
         }
     });
     //eaving prints for testing purposes
-    // let i = 0;
-    // scheduledDays.forEach(day => {
-    //     console.log("day: " + i);
-    //     day.forEach(date => {
-    //         console.log(date.medicationId);
-    //         date.datesWTime.forEach(dateWTime => {
-    //             console.log(dateWTime.date.toString());
-    //             console.log(dateWTime.dosageId);
-    //         });
-    //     });
-    //     i++;
-    // });
+    let i = 0;
+    scheduledDays.forEach(day => {
+        console.log("day: " + i);
+        day.forEach(date => {
+            console.log(date.medicationId);
+            date.datesWTime.forEach(dateWTime => {
+                console.log(dateWTime.date.toString());
+                console.log(dateWTime.dosageId);
+            });
+        });
+        i++;
+    });
     return scheduledDays;
 }
 

@@ -43,8 +43,6 @@ export const login = (req, res) => {
             if (!user.comparePassword(req.body.password, user.hashPassword)) {
                 res.status(401).json({error: true, message: 'Authentication failed. Invalid email or password.'});
             } else {
-                console.log(user);
-                setOccurrencesFor(user);
                 return res.json({error: false, token: jwt.sign({email: user.email, username: user.username, _id: user.id}, 'ATLBANANA')});
             }
         }

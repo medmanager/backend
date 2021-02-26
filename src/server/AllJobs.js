@@ -15,7 +15,7 @@ export default class AllJobs {
             let users = await User.find({});
             //if there are no registered users, no need to do anything
             if (users.length == 0) return;
-            users.forEach(user => {
+            //users.forEach(user => {
                 // let medIds = [];
                 // if (user.medications.length != 0) {
                 //     let schedule = getScheduledDays(user, null, null);
@@ -33,12 +33,12 @@ export default class AllJobs {
                 //     });
                 //     medIds.push({medicationId: med._id, });
                 // });
-                let time = "0 0 * * 0"; //run every week at the start of each Sunday
-                let job = cron.schedule(time, function() {
-                    scheduleWeeklyOccurrences(user._id);
-                });
-                this.allJobs.push({userId: user._id, weeklyJob: job, medications: []});
-            });
+                // let time = "0 0 * * 0"; //run every week at the start of each Sunday
+                // let job = cron.schedule(time, function() {
+                //     scheduleWeeklyOccurrences(user._id);
+                // });
+                // this.allJobs.push({userId: user._id, weeklyJob: job, medications: []});
+            //});
             //console.log(this.allJobs);
         }
     }
