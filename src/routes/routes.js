@@ -1,6 +1,6 @@
 import { addNewMedication, getMedications, 
     getMedicationFromID, updateMedicationFromID, deleteMedicationFromID,
-    fuzzySearchWithString, deleteMedications, getOccurrences, addOccurrence} from '../controllers/controller'
+    fuzzySearchWithString, deleteMedications, getOccurrences, addOccurrence, getDosages} from '../controllers/controller'
 import {login, register, loginRequired, verify} from '../controllers/userControllers'
 
 
@@ -18,6 +18,9 @@ app.route('/medication/:medicationID')
    //get a specific medication from ID
    .get(loginRequired, getMedicationFromID)
    .put(loginRequired, updateMedicationFromID);
+
+app.route('/dosage')
+   .get(loginRequired, getDosages);
 
 app.route('/schedule/occurrences')
    .get(loginRequired, getOccurrences)

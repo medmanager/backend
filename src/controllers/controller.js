@@ -4,10 +4,10 @@ import { UserSchema } from '../models/userModel';
 import { EventSchema } from '../models/eventModel';
 import https from 'https';
 import _ from 'lodash';
+import { json } from 'body-parser';
 
 const Medication = mongoose.model('Medication', MedicationSchema);
 const User = mongoose.model('User', UserSchema);
-const Event = mongoose.model('Event', EventSchema);
 
 // add a new medication
 export const addNewMedication = (req, res) => {
@@ -165,6 +165,30 @@ export const fuzzySearchWithString = (req, res) => {
 };
 
 /**
+ * returns an array of dosages independent of medications
+ */
+export const getDosages = (req, res) => {
+    let userId = req.user;
+    if (userId == null) {
+        res.send({error: true, message: "token invalid: cannot get user"});
+        return;
+    }
+    return User.findById({_id: userId}, (err, user) => {
+        if (err) {
+            res.json({error: true, message: "cannot find user!"});
+        } else {
+            let dosages = [];
+            user.medications.forEach(med => {
+                med.dosages.forEach(dosage => {
+                    dosages.push(dosage);
+                });
+            });
+            res.json({error: false, dosages: dosages});
+        }
+    });
+};
+
+/**
  * Function to get weekly occurrences of all medications
  * 2 parameters in body:
  * @param startDate : DateTime object containing start date to find occurrences for
@@ -219,7 +243,13 @@ export const addOccurrence = (req, res) => {
     }
     let user = req.user;
     let occurrence = req.body.occurrence;
-    
+    return User.findById({_id: userId}, (err, user) => {
+        if (err) {
+            return {error: true, message: "cannot find user!"};
+        } else {
+            return {error: false, user};
+        }
+    });
 };
 
 /*
@@ -247,7 +277,6 @@ const getScheduledDays = (user, startDate, endDate) => {
     let scheduledDays = [];
 
     //ceil both startDate and endDate to the endOfDay (avoids indexing issues later)
-    const daylen = 1000*3600*24;
     startDate = new Date(startDate.getTime());
     startDate.setHours(23,59,59,999);
     endDate = new Date(endDate.getTime());
