@@ -16,8 +16,8 @@ export const addNewMedication = (req, res) => {
         res.send({error: true, message: "token error: cannot find user from token!"});
     }
     let newMedication = new Medication(req.body);
-    newMedication.updateEvents();
-    User.findById(req.params.userID, (err, user) => {
+    console.log(newMedication);
+    User.findById(req.user, (err, user) => {
         if (err) {
             res.send(err);
         } else {
@@ -35,7 +35,7 @@ export const addNewMedication = (req, res) => {
             //     });
             // }
 
-            user.save((err, user) => {
+            user.save((err1, user) => {
                 newMedication.save((err, medication) => {
                     if (err) {
                         res.send(err);
@@ -304,9 +304,6 @@ const getScheduledDays = (user, startDate, endDate) => {
     endDate = new Date(endDate.getTime());
     endDate.setHours(23,59,59,999);
 
-    console.log(startDate.toString());
-    console.log(endDate.toString());
-
     //get number of milliseconds between start date and end date
     let days = endDate.getTime() - startDate.getTime();
     //divide by number of milliseconds in one day and ceil
@@ -352,7 +349,7 @@ const getScheduledDays = (user, startDate, endDate) => {
             //if the start of each week isn't Sunday, make it Sunday
             let days_s = start.getDay();
             if (days_s != 0) {
-                start = new Date(start.getTime() - days_s*(1000*3600*24)) 
+                start = new Date(start.getTime() - days_s*(1000*3600*24)) ;
             }
             //loop over weeks so multiply interval by 7
             for (let i = 0; i < daysbetween; i+=7*med.frequency.interval) {
@@ -362,8 +359,9 @@ const getScheduledDays = (user, startDate, endDate) => {
                 }
                 //loop over each day of this week
                 for (let j = i; j < i+7; j++) {
-                    let daysbetween_m = i * (1000*3600*24);
+                    let daysbetween_m = (j - i) * (1000*3600*24);
                     let dateToTake = new Date(start.getTime() + daysbetween_m);
+
                     //this kind of sucks but we need to check if the weekday matches the current day
                     //and the current weekday is set to true in the database for this med
                     //we also need to make sure the date is in the day range too
@@ -392,18 +390,18 @@ const getScheduledDays = (user, startDate, endDate) => {
         }
     });
     //eaving prints for testing purposes
-    let i = 0;
-    scheduledDays.forEach(day => {
-        console.log("day: " + i);
-        day.forEach(date => {
-            console.log(date.medicationId);
-            date.datesWTime.forEach(dateWTime => {
-                console.log(dateWTime.date.toString());
-                console.log(dateWTime.dosageId);
-            });
-        });
-        i++;
-    });
+    // let i = 0;
+    // scheduledDays.forEach(day => {
+    //     console.log("day: " + i);
+    //     day.forEach(date => {
+    //         console.log(date.medicationId);
+    //         date.datesWTime.forEach(dateWTime => {
+    //             console.log(dateWTime.date.toString());
+    //             console.log(dateWTime.dosageId);
+    //         });
+    //     });
+    //     i++;
+    // });
     return scheduledDays;
 }
 

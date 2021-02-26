@@ -4,18 +4,16 @@ import * as cron from 'node-cron';
 
 let User = mongoose.model('User', UserSchema);
 
-export class AllJobs {
+export default class AllJobs {
     constructor() {
-        this.alljobs = [];
-        //initJobs();
-    }
-
-    async initJobs() {
-        users = await User.find({});
-        //if there are no registered users, no need to do anything
-        if (users.length == 0) return;
-        users.forEach(user => {
-            this.alljobs.push(user);
-        });
+        this.allJobs = [];
+        this.initJobs = async () => {
+            let users = await User.find({});
+            //if there are no registered users, no need to do anything
+            if (users.length == 0) return;
+            users.forEach(user => {
+                this.allJobs.push(user);
+            });
+        }
     }
 }
