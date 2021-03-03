@@ -1,43 +1,134 @@
-import mongoose from 'mongoose';
-// import { MedicationSchema } from '../models/MedicationModel';
-import { UserSchema } from '../models/userModel';
 import _ from 'lodash';
-import { EventSchema } from '../models/eventModel';
-import * as cron from 'node-cron';
+import { getScheduledDays, getUser} from './controller';
+import schedule from 'node-schedule';
 
-
-// const Medication = mongoose.model('Medication', MedicationSchema);
-const User = mongoose.model('User', UserSchema);
-const Event = mongoose.model('Event', EventSchema);
-
-export const medicationCheck = () => {
-    User.find((err, users) => {
-        if (err) {
-            console.log(err);
-        } else {
-            users.forEach((user, index) => {
-                if (user.medications.length != user.currentEvents.length) {
-                    let newEvent = new Event({
-                       "timestamp": 1,
-                       "reminderTime": 1, 
-                       "medicationID": "7"
+/** 
+ * When a new medication is added, schedule new jobs for the week
+ * and store array of occurrences
+ * ASSUME OTHER MEDS HAVE ALREADY BEEN SCHEDULED
+ */
+export const scheduleNewMedication = async (user, medication) => {
+    let occurrences = getScheduledDays(user);
+    occurrences.forEach(day => {
+        day.forEach(med => {
+            user.medications.forEach(uMed => {
+                if (med.medicationId == medication._id == uMed._id) {
+                    //found new med to schedule
+                    med.datesWTime.forEach(dose => {
+                        uMed.dosages.forEach(uDose => {
+                            if (dose.dosageId, uDose._id) {
+                                //create occurrence
+                                let occurrence = {
+                                    isTaken: false,
+                                    isComplete: false,
+                                    timeTaken: null,
+                                    scheduledDate: dose.date,
+                                };
+                                uDose.occurrences.push(occurrence);
+                            }
+                        });
                     });
-                    user.currentEvents.push(newEvent);
-                    user.save((err, user) => {
-                        if (err) {
-                            console.log(err);
-                        }
-                    })
                 }
-            })
+            });
+     
+        })
+    });
+    //SAVING USER WILL AUTO GENERATE OCCURRENCE ID'S FOR US TO USE
+    try {
+        user = await user.save();
+    } catch (err) {
+        //not quite sure what to do when user fails to save
+        console.log("user cannot be saved");
+        return {error: true};
+    }
+    user.medications.forEach(med => {
+        //find new med
+        if (medication._id == med._id) {
+            med.dosages.forEach(dosage => {
+                dosage.occurrences.forEach(occurrence => {
+                    //only schedule a job for the dose if reminders are toggled
+                    if (dosage.sendReminder) {
+                        schedule.scheduleJob(occurrence._id.toString(), occurrence.scheduledDate, function() {
+                            sendNotification();
+                        });
+                    }
+                });
+            });
         }
-    })
-}
+    });
+    return {error: false};
+};
 
-export function scheduleWeeklyOccurrences(userId) {
-    console.log(userId);
+/**
+ * function to schedule weekly dosage occurrences for the week
+ * Must create an occurrence entry array for each dosage
+ */
+export const scheduleWeeklyOccurrences = async (userId) => {
+    let user = await getUser(userId);
+    user = removePastOccurrences(user);
+    let occurrences = getScheduledDays(user);
+    occurrences.forEach(day => {
+        day.forEach(med => {
+            user.medications.forEach(uMed => {
+                if (med.medicationId == uMed._id) {
+                    //we found the right med
+                    med.datesWTime.forEach(dose => {
+                        uMed.dosages.forEach(uDose => {
+                            if (dose.dosageId == uDose._id) {
+                                //we found the right dose
+                                //create new occurrence to add
+                                let occurrence = {
+                                    isTaken: false,
+                                    isComplete: false,
+                                    timeTaken: null,
+                                    scheduledDate: dose.date,
+                                    //make id length of occurrences
+                                };
+                                uDose.occurrences.push(occurrence);
+                            }
+                        });
+                    });
+                }
+            });
+        });
+    });
+    //SAVING USER WILL AUTO GENERATE OCCURRENCE ID'S FOR US TO USE
+    try {
+        user = await user.save();
+    } catch (err) {
+        //not quite sure what to do when user fails to save
+        console.log("user cannot be saved");
+        return {error: true, message: err};
+    }
+    user.medications.forEach(med => {
+        med.dosages.forEach(dosage => {
+            dosage.occurrences.forEach(occurrence => {
+                //only schedule a job for the dose if reminders are toggled
+                if (dosage.sendReminder) {
+                    schedule.scheduleJob(occurrence._id.toString(), occurrence.scheduledDate, function() {
+                        sendNotification();
+                    });
+                }
+            });
+        });
+    });
+    return {error: false};
+};
+
+/**
+ * Helper function for scheduleWeeklyOccurrences that removes
+ * all past occurrences before scheduling the ones for this week.
+ * This is to ensure we don't over populate the occurrences
+ */
+const removePastOccurrences = (user) => {
+    user.medications.forEach(med => {
+        med.dosages.forEach(dosage => {
+            dosage.occurrences = [];
+        });
+    });
+    return user;
 };
 
 export const sendNotification = () => {
-    console.log('take your medication noob');
+    console.log('take your medication');
 }

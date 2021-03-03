@@ -4,7 +4,7 @@ import { UserSchema } from '../models/userModel';
 import { DosageSchema } from '../models/DosageModel';
 import https from 'https';
 import _ from 'lodash';
-import { json } from 'body-parser';
+import { scheduleNewMedication } from './cronController';
 
 const Medication = mongoose.model('Medication', MedicationSchema);
 const User = mongoose.model('User', UserSchema);
@@ -16,34 +16,17 @@ export const addNewMedication = (req, res) => {
         res.send({error: true, message: "token error: cannot find user from token!"});
     }
     let newMedication = new Medication(req.body);
-    console.log(newMedication);
     User.findById(req.user, (err, user) => {
         if (err) {
             res.send(err);
         } else {
             user.medications.push(newMedication);
-            
-            // let arr = [];
-            // for (var day in newMedication.frequency.weekdays) {
-            //     // console.log(newMedication.frequency.weekdays[day]);
-            //     let i;
-            //     for (i = 0; i < newMedication.frequency.interval; i++) {
-            //         arr.push(`* ${9 + i * 8 / newMedication.frequency.interval} * * ${day}`);
-            //     }
-            //     arr.forEach((time, index) => {
-            //         cron.schedule(time, sendNotification);
-            //     });
-            // }
 
-            user.save((err1, user) => {
-                newMedication.save((err, medication) => {
-                    if (err) {
-                        res.send(err);
-                    } else {
-                        res.json(medication);
-                    }
-                });
-            });
+            //schedule new occurrences for this week
+            //and save user
+            let resp = scheduleNewMedication(user, newMedication);
+            if (resp.error) res.send(resp.message);
+            else res.json(newMedication);
         }
     });
 };
@@ -246,13 +229,13 @@ export const addOccurrence = (req, res) => {
     let occurrence = req.body.occurrence;
     let dosageId = req.body.occurrence.dosageId;
     let occurrenceToSave = {
-        _id: occurrenceId,
+        id: occurrenceId,
         timeTaken: occurrence.timeTaken,
         isTaken: occurrence.isTaken,
         isComplete: true,
     };
 
-    return Dosage.findById({_id: occurrence.id}, (err, dosage) => {
+    Dosage.findById({_id: occurrence.id}, (err, dosage) => {
         if (err) {
             res.send({error: true, message: "cannot find dosage!"});
         } else {
@@ -312,6 +295,7 @@ export const getScheduledDays = (user, startDate, endDate) => {
     for(let x = 0; x <= days; x++) {
         scheduledDays.push([]);
     }
+    if (user.medications == null) return scheduledDays;
     user.medications.forEach(med => {
         let start = med.dateAdded;
         //get number of milliseconds between start date and end date
@@ -408,7 +392,7 @@ export const getScheduledDays = (user, startDate, endDate) => {
 }
 
 /*async helper function to find a user to be used in getOccurrences */
-const getUser = async (userId) => {
+export const getUser = async (userId) => {
     return User.findById({_id: userId}, (err, user) => {
         if (err) {
             return {error: true, message: "cannot find user!"};

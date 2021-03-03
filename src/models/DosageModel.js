@@ -11,6 +11,9 @@ const OccurrenceSchema = new Schema({
     },
     timeTaken: {
         type: Date,
+    },
+    scheduledDate: {
+        type: Date,
     }
 });
 
