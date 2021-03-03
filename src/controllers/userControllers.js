@@ -1,9 +1,7 @@
-import mongoose, { createConnection } from 'mongoose';
+import mongoose from 'mongoose';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import {UserSchema} from '../models/userModel';
-//import * as cron from 'node-cron';
-import { setOccurrencesFor } from './cronController';
 
 let User = mongoose.model('User', UserSchema);
 

@@ -26,7 +26,8 @@ export const addNewMedication = (req, res) => {
             //and save user
             let resp = scheduleNewMedication(user, newMedication);
             if (resp.error) res.send(resp.message);
-            else res.json(newMedication);
+            //newMedication doesn't contain occurrences so send updated version
+            else res.json(user.medications[user.medications.length - 1]);
         }
     });
 };
@@ -42,14 +43,6 @@ export const getMedications = (req, res) => {
             res.send(user.medications);
         }
     });
-    // User.findById(req.params.userID, (err, user) => {
-    //     if (err) {
-    //         res.send(err);
-    //     } else {
-    //         res.json(user);
-    //     }
-        
-    // });
 };
 
 //Potentially useful in the future? This method should work if implemented as is, just not sure if it's necessary

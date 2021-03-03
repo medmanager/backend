@@ -1,8 +1,6 @@
 import mongoose from 'mongoose';
 import UserSchema from '../models/userModel';
-import * as cron from 'node-cron';
 import {scheduleWeeklyOccurrences} from '../controllers/cronController';
-import {getScheduledDays} from '../controllers/controller';
 import schedule from 'node-schedule';
 
 let User = mongoose.model('User', UserSchema);
@@ -48,10 +46,12 @@ let User = mongoose.model('User', UserSchema);
 export const scheduleUserJobs = async () => {
     let users = await User.find({});
     users.forEach(user => {
+        //first schedule doses for this week
+        scheduleWeeklyOccurrences(user._id);
+
         let time = "0 0 * * 0"; //run every week at the start of each Sunday
         //nodeschedule allows editing of jobs based off user id, so pass in user._id
         //kind of weird, but id must be a string
-        scheduleWeeklyOccurrences(user._id);
         schedule.scheduleJob(user._id.toString(), time, function() {
             scheduleWeeklyOccurrences(user._id);
         });

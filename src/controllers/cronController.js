@@ -16,7 +16,9 @@ export const scheduleNewMedication = async (user, medication) => {
                     //found new med to schedule
                     med.datesWTime.forEach(dose => {
                         uMed.dosages.forEach(uDose => {
-                            if (dose.dosageId, uDose._id) {
+                            let now = new Date();
+                            console.log(dose);
+                            if (dose.dosageId == uDose._id && now.getTime() < dose.date.getTime()) {
                                 //create occurrence
                                 let occurrence = {
                                     isTaken: false,
@@ -74,7 +76,9 @@ export const scheduleWeeklyOccurrences = async (userId) => {
                     //we found the right med
                     med.datesWTime.forEach(dose => {
                         uMed.dosages.forEach(uDose => {
-                            if (dose.dosageId == uDose._id) {
+                            //ensure we find the right dose and that the occurrence hasn't already passed
+                            let now = new Date();
+                            if (dose.dosageId == uDose._id && now.getTime() < dose.date.getTime()) {
                                 //we found the right dose
                                 //create new occurrence to add
                                 let occurrence = {
