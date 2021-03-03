@@ -362,7 +362,6 @@ export const getScheduledDays = (user, startDate, endDate) => {
                 for (let j = i; j < i+7; j++) {
                     let daysbetween_m = (j - i) * (1000*3600*24);
                     let dateToTake = new Date(start.getTime() + daysbetween_m);
-                    console.log(dateToTake.toString());
                     dateToTake.setHours(23,59,59,999);
 
                     //this kind of sucks but we need to check if the weekday matches the current day
@@ -393,18 +392,18 @@ export const getScheduledDays = (user, startDate, endDate) => {
         }
     });
     //eaving prints for testing purposes
-    let i = 0;
-    scheduledDays.forEach(day => {
-        console.log("day: " + i);
-        day.forEach(date => {
-            console.log(date.medicationId);
-            date.datesWTime.forEach(dateWTime => {
-                console.log(dateWTime.date.toString());
-                console.log(dateWTime.dosageId);
-            });
-        });
-        i++;
-    });
+    // let i = 0;
+    // scheduledDays.forEach(day => {
+    //     console.log("day: " + i);
+    //     day.forEach(date => {
+    //         console.log(date.medicationId);
+    //         date.datesWTime.forEach(dateWTime => {
+    //             console.log(dateWTime.date.toString());
+    //             console.log(dateWTime.dosageId);
+    //         });
+    //     });
+    //     i++;
+    // });
     return scheduledDays;
 }
 
