@@ -349,8 +349,9 @@ export const getScheduledDays = (user, startDate, endDate) => {
             //if the start of each week isn't Sunday, make it Sunday
             let days_s = start.getDay();
             if (days_s != 0) {
-                start = new Date(start.getTime() - days_s*(1000*3600*24)) ;
+                start = new Date(start.getTime() - days_s*(1000*3600*24));
             }
+
             //loop over weeks so multiply interval by 7
             for (let i = 0; i < daysbetween; i+=7*med.frequency.interval) {
                 if ((daysbetween - i - 6) > days + 1) {
@@ -361,6 +362,7 @@ export const getScheduledDays = (user, startDate, endDate) => {
                 for (let j = i; j < i+7; j++) {
                     let daysbetween_m = (j - i) * (1000*3600*24);
                     let dateToTake = new Date(start.getTime() + daysbetween_m);
+                    console.log(dateToTake.toString());
                     dateToTake.setHours(23,59,59,999);
 
                     //this kind of sucks but we need to check if the weekday matches the current day
@@ -383,7 +385,7 @@ export const getScheduledDays = (user, startDate, endDate) => {
                             datesWTime.push({date: dateWTime, dosageId: dosage._id})
                         });
                         if (datesWTime.length > 0) {
-                            scheduledDays[i - offset].push({datesWTime, medicationId: med._id});
+                            scheduledDays[j - i].push({datesWTime, medicationId: med._id});
                         }
                     }
                 }
