@@ -12,7 +12,7 @@ export const scheduleNewMedication = async (user, medication) => {
     occurrences.forEach(day => {
         day.forEach(med => {
             user.medications.forEach(uMed => {
-                if (med.medicationId == medication._id == uMed._id) {
+                if (med.medicationId == medication._id && medication._id == uMed._id) {
                     //found new med to schedule
                     med.datesWTime.forEach(dose => {
                         uMed.dosages.forEach(uDose => {

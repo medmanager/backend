@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 
 const Schema = mongoose.Schema;
 
-const OccurrenceSchema = new Schema({
+export const OccurrenceSchema = new Schema({
     isTaken: {
         type: Boolean,
     },

@@ -1,14 +1,16 @@
 import mongoose from 'mongoose';
 import { MedicationSchema } from '../models/MedicationModel';
 import { UserSchema } from '../models/userModel';
-import { DosageSchema } from '../models/DosageModel';
+import { DosageSchema, OccurrenceSchema } from '../models/DosageModel';
 import https from 'https';
 import _ from 'lodash';
 import { scheduleNewMedication } from './cronController';
+import schedule from 'node-schedule';
 
 const Medication = mongoose.model('Medication', MedicationSchema);
 const User = mongoose.model('User', UserSchema);
 const Dosage = mongoose.model('Dosage', DosageSchema);
+const Occurrence = mongoose.model('Occurrence', OccurrenceSchema);
 
 // add a new medication
 export const addNewMedication = (req, res) => {
@@ -177,8 +179,8 @@ export const getOccurrences = async (req, res) => {
     let userId;
 
     userId = req.user;
-    startDate = req.body.startDate;
-    endDate = req.body.endDate;
+    startDate = null;
+    endDate = null;
 
     if (userId == null) {
         res.send({error: true, message: "token invalid: cannot get user"});
@@ -218,33 +220,35 @@ export const addOccurrence = (req, res) => {
     if (req.user == null) {
         res.send({error: true, message: "token error: cannot find user from token!"});
     }
+    //we don't actually need the 
     let userId = req.user;
     let occurrence = req.body.occurrence;
-    let dosageId = req.body.occurrence.dosageId;
-    let occurrenceToSave = {
-        id: occurrenceId,
-        timeTaken: occurrence.timeTaken,
-        isTaken: occurrence.isTaken,
-        isComplete: true,
-    };
+    if (occurrence.isTaken == NULL || occurrence.timeTaken == NULL || occurrence.occurrenceId == NULL) {
+        res.send({error: true, message: "missing occurrence data!"});
+    }
 
-    Dosage.findById({_id: occurrence.id}, (err, dosage) => {
+    //this doesn't verify that the occurrence exists in the user specified in userId
+    //may be an oversight that'll need to be looked into later
+    Occurrence.findById({_id: occurrence.occurrenceId}, (err, occurrenceToUpdate) => {
         if (err) {
-            res.send({error: true, message: "cannot find dosage!"});
+            res.send({error: true, message: "occurrence expired!"});
         } else {
-            //find the occurrence we need to update
-            let updated = false;
-            dosage.occurrences.forEach(occurrence => {
-                if (occurrence._id == occurrenceToSave._id) {
-                    occurrence = occurrenceToSave;
-                    updated = true;
-                }
-            });
-            if (!update) res.send({error: true, message: "occurrence doesn't exist!"});
-            dosage.save((err) => {
+            //update occurrence
+            occurrenceToUpdate.isTaken = occurrence.isTaken;
+            occurrenceToUpdate.timeTaken = occurrence.timeTaken;
+            occurrenceToUpdate.isComplete = true;
+            occurrenceToUpdate.save((err) => {
                 if (err) res.send({error: true, message: "occurrence cannot be saved!"});
             });
-            //TODO: CANCEL NOTIFICATION
+            //CANCEL NOTIFICATION
+            const key = occurrenceToUpdate._id.toString();
+            //if job exists, then cancel it!
+            if (key in schedule.scheduledJobs) {
+                const job = schedule.scheduledJobs[key];
+                if (job != null) {
+                    job.cancel();
+                }
+            }
             res.send({error: false});
         }
     });
