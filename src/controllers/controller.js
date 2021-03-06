@@ -1,23 +1,18 @@
 import mongoose from 'mongoose';
-import { MedicationSchema } from '../models/MedicationModel';
 import { UserSchema } from '../models/userModel';
-import { DosageSchema, OccurrenceSchema } from '../models/DosageModel';
 import https from 'https';
 import _ from 'lodash';
 import { scheduleNewMedication } from './cronController';
 import schedule from 'node-schedule';
 
-const Medication = mongoose.model('Medication', MedicationSchema);
 const User = mongoose.model('User', UserSchema);
-const Dosage = mongoose.model('Dosage', DosageSchema);
-const Occurrence = mongoose.model('Occurrence', OccurrenceSchema);
 
 // add a new medication
 export const addNewMedication = (req, res) => {
     if (req.user == null) {
         res.send({error: true, message: "token error: cannot find user from token!"});
     }
-    let newMedication = new Medication(req.body);
+    let newMedication = req.body;
     User.findById(req.user, (err, user) => {
         if (err) {
             res.send(err);
@@ -47,62 +42,89 @@ export const getMedications = (req, res) => {
     });
 };
 
-//Potentially useful in the future? This method should work if implemented as is, just not sure if it's necessary
 
 export const getMedicationFromID = (req, res) => {
     if (req.user == null) {
         res.send({error: true, message: "token error: cannot find user from token!"});
     }
-    Medication.findById(req.params.medicationID, (err, medication) => {
+    //req.params.medicationID
+    User.findOne({ _id: req.user }, (err, user) => {
         if (err) {
             res.send(err);
         } else {
-            res.send(medication);
+            const medId = req.params.medicationID
+            if (medId == null) {
+                res.send({error: true, message: "cannot find medication!"});
+            }
+            const med = user.medications.find(med => med._id == medId);
+            if (med == null) {
+                res.send({error: true, message: "cannot find medication!"});
+            } else {
+                res.send({error: false, medication: med});
+            }
         }
     });
 };
 
-// Should still work as is
 export const updateMedicationFromID = (req, res) => {
     if (req.user == null) {
         res.send({error: true, message: "token error: cannot find user from token!"});
     }
-    Medication.findOneAndUpdate({_id: req.params.medicationID}, req.body, {new: true, useFindAndModify: false}, (err, medication) => {
+    User.findOne({ _id: req.user }, (err, user) => {
         if (err) {
             res.send(err);
         } else {
-            res.json(medication);
+            let medId = req.params.medicationID
+            if (medId == null) {
+                res.send({error: true, message: "cannot find medication!"});
+                return;
+            } else if (medId != req.body._id) {
+                res.send({error: true, message: "medicationIds do not match!"});
+                return;
+            }
+            const med = req.body;
+            if (med == null) res.send({error: true, message: "cannot find medication!"});
+            let i = 0; 
+            let notFound = true;
+            for (i = 0; i < user.medications.length && notFound; i++) {
+                if (user.medications[i]._id == medId) {
+                    user.medications[i] = med;
+                    console.log(user.medications[i]);
+                    notFound = false;
+                }
+            }
+            if (notFound) res.send({error: true, message: "cannot find medication!"});
+            let resp = scheduleNewMedication(user, med);
+            if (resp.error) res.send(resp.message);
+            else res.send({error: false, medication: user.medications.find(medE => medE._id == med._id)});
         }
     });
 };
 
-// Should still work as is
+
 export const deleteMedicationFromID = (req, res) => {
-    // console.log("swag zone"); ultra helpful debugging string
     if (req.user == null) {
         res.send({error: true, message: "token error: cannot find user from token!"});
     }
-    User.findById(req.user, (err, user) => {
+    User.findOne({ _id: req.user }, (err, user) => {
         if (err) {
             res.send(err);
         } else {
-            let relevantMedication = Medication.findById(req.params.medicationID, (err, user) => {
-                if (err) {
-                    res.send(err);
+            let medId = req.params.medicationID;
+            if (medId == null) res.send({error: true, message: "cannot find medication!"});
+            let i = 0; 
+            let notFound = true;
+            let med = null;
+            for (i = 0; i < user.medications.length && notFound; i++) {
+                if (user.medications[i]._id == medId) {
+                    med = user.medications.splice(i, 1);
+                    notFound = false;
                 }
-            });
-            user.medications.splice(user.medications.indexOf(relevantMedication));
-            user.save((err, user) => {
-                if (err) {
-                    res.send(err);
-                } else {
-                    Medication.remove({_id: req.params.medicationID}, (err, medication) => {
-                        if (err) {
-                            res.send(err);
-                        }
-                        res.json({ message: 'successfully deleted medication'});
-                    });
-                }
+            }
+            if (notFound) res.send({error: true, message: "cannot find medication!"});
+            user.save((err) => {
+                if (err) res.send({error: true, message: "cannot delete medication"});
+                else res.send({error: false, medication: med});
             })
         }
     });
@@ -192,25 +214,7 @@ export const getOccurrences = async (req, res) => {
         return;
     }
 
-    let scheduledDays = getScheduledDays(user, startDate, endDate);
-
-    let orderedDays = [];
-
-    //order scheduled days by time instead of medication
-    scheduledDays.forEach(day => {
-        let orderMeds = [];
-        day.forEach(med => {
-            med.datesWTime.forEach(dose => {
-                let i = 0;
-                //find index in orderMeds to append new entry
-                while (i < orderMeds.length && dose.date.getTime() > orderMeds[i].date.getTime())
-                    i++;
-                orderMeds.splice(i, 0, {medicationId: med.medicationId, dosageId: dose.dosageId, date: dose.date});
-            });
-        });
-        //push ordered array to day index in orderedDays
-        orderedDays.push(orderMeds);
-    });
+    let orderedDays = getWeeklyOccurrences(user, startDate, endDate);
     
     res.json(orderedDays);
 }
@@ -220,39 +224,115 @@ export const addOccurrence = (req, res) => {
     if (req.user == null) {
         res.send({error: true, message: "token error: cannot find user from token!"});
     }
-    //we don't actually need the 
     let userId = req.user;
     let occurrence = req.body.occurrence;
-    if (occurrence.isTaken == NULL || occurrence.timeTaken == NULL || occurrence.occurrenceId == NULL) {
+    let medicationId = req.body.medicationId;
+    let dosageId = req.body.dosageId;
+    if (occurrence == null || medicationId == null || dosageId == null) {
         res.send({error: true, message: "missing occurrence data!"});
     }
 
-    //this doesn't verify that the occurrence exists in the user specified in userId
-    //may be an oversight that'll need to be looked into later
-    Occurrence.findById({_id: occurrence.occurrenceId}, (err, occurrenceToUpdate) => {
+    User.findOne({_id : userId}, (err, user) => {
         if (err) {
-            res.send({error: true, message: "occurrence expired!"});
+            res.json({error: true, message: "cannot find user!"});
         } else {
-            //update occurrence
-            occurrenceToUpdate.isTaken = occurrence.isTaken;
-            occurrenceToUpdate.timeTaken = occurrence.timeTaken;
-            occurrenceToUpdate.isComplete = true;
-            occurrenceToUpdate.save((err) => {
-                if (err) res.send({error: true, message: "occurrence cannot be saved!"});
+            //find the indexes of the med, dosage, and occurrence
+            let medIndex = user.medications.findIndex(med => med._id == medicationId);
+            if (medIndex  == -1) {
+                res.send({error: true, message: "cannot find medication!"});
+                return;
+            }
+            let dosageIndex = user.medications[medIndex].dosages.findIndex(dosage => dosage._id == dosageId);
+            if (dosageIndex  == -1) {
+                res.send({error: true, message: "cannot find dosage!"});
+                return;
+            }
+            let occurrenceIndex = user.medications[medIndex].dosages[dosageIndex].occurrences.findIndex(occurrenceU => occurrenceU._id == occurrence._id);
+            if (occurrenceIndex  == -1) {
+                res.send({error: true, message: "cannot find occurrence!"});
+                return;
+            }
+            user.medications[medIndex].dosages[dosageIndex].occurrences[occurrenceIndex].isTaken = occurrence.isTaken;
+            user.medications[medIndex].dosages[dosageIndex].occurrences[occurrenceIndex].isTaken = occurrence.timeTaken;
+            user.medications[medIndex].dosages[dosageIndex].occurrences[occurrenceIndex].isTaken = true;
+            let occurrenceToUpdate = user.medications[medIndex].dosages[dosageIndex].occurrences[occurrenceIndex];
+            user.save((err) => {
+                if (err) res.json({error: true, message: "cannot save occurrence!"});
             });
             //CANCEL NOTIFICATION
             const key = occurrenceToUpdate._id.toString();
             //if job exists, then cancel it!
             if (key in schedule.scheduledJobs) {
                 const job = schedule.scheduledJobs[key];
-                if (job != null) {
+                if (job != null && job != undefined) {
                     job.cancel();
                 }
             }
-            res.send({error: false});
+            res.send({error: false, occurrence: occurrenceToUpdate});
         }
     });
 };
+
+/**
+ * Helper function for getOccurrences that uses the occurrences already stored
+ * in the database to send. Formats them into an array of days containing an array of 
+ * occurrences where each occurrence has a medicationId, dosageId, and occurrence (from DosageModel)
+ * 
+ * Right now the function is not dynamic and only gives occurrences for the current week
+ * 
+ * When we start tracking occurrences from previous weeks, we can easily change the startDate
+ * and endDate to parameters so that this function can be used to generate easily parsable 
+ * tracking data.
+ */
+const getWeeklyOccurrences = (user) => {
+    let startDate = new Date();
+    let dayS = startDate.getDay();
+    //sunday is index 0 so subtract current day in millis
+    startDate = new Date(startDate.getTime() - (dayS)*24*3600*1000);
+
+    let endDate = new Date();
+    let dayE = endDate.getDay();
+    //add remaining days in the week in millis
+    endDate = new Date(endDate.getTime() + ((6 - dayE)*24*3600*1000));
+    
+    //set to end of day
+    startDate.setHours(23,59,59,999);
+    endDate.setHours(23,59,59,999);
+
+    //get number of milliseconds between start date and end date
+    let days = endDate.getTime() - startDate.getTime();
+    //divide by number of milliseconds in one day and ceil
+    days = Math.ceil(days / (1000 * 3600 * 24));
+    //create entries in scheduledDays array for each day inbetween
+    let scheduledDays = [];
+    for(let x = 0; x <= days; x++) {
+        scheduledDays.push([]);
+    }
+
+    user.medications.forEach(med => {
+        med.dosages.forEach(dose => {
+            dose.occurrences.forEach(occurrence => {
+                let dayIndex = 0;
+                scheduledDays.forEach(day => {
+                    //only add occurrence to day if the occurrence is in the timeframe and 
+                    //between start and end date
+                    if (occurrence.scheduledDate.getTime() > startDate.getTime() 
+                        && occurrence.scheduledDate.getTime() < endDate.getTime()
+                        && occurrence.scheduledDate.getDay() == dayIndex) {
+                            day.push({medicationId: med._id, dosageId: dose._id, occurrence: occurrence});
+                        }
+                    dayIndex++;
+                });
+            });
+        });
+    });
+    //sort each day by date
+    scheduledDays.forEach(day => {
+        day.sort((a, b) => b.occurrence.date - a.occurrence.date);
+    });
+    return scheduledDays;
+}
+
 
 /*
 * Function returns an array of days indexed from 0 (startDay) to (endDay - 1)
@@ -396,15 +476,5 @@ export const getUser = async (userId) => {
         } else {
             return {error: false, user};
         }
-    });
-};
-
-//made for debugging purposes
-export const deleteMedications = (req, res) => {
-    Medication.remove({}, (err) => {
-        if (err) {
-            res.send(err);
-        }
-        res.json({ message: 'successfully deleted ALL medications'});
     });
 };

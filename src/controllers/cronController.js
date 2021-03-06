@@ -8,6 +8,7 @@ import schedule from 'node-schedule';
  * ASSUME OTHER MEDS HAVE ALREADY BEEN SCHEDULED
  */
 export const scheduleNewMedication = async (user, medication) => {
+    removePastOccurrencesMed(user, medication);
     let occurrences = getScheduledDays(user);
     occurrences.forEach(day => {
         day.forEach(med => {
@@ -17,7 +18,6 @@ export const scheduleNewMedication = async (user, medication) => {
                     med.datesWTime.forEach(dose => {
                         uMed.dosages.forEach(uDose => {
                             let now = new Date();
-                            console.log(dose);
                             if (dose.dosageId == uDose._id && now.getTime() < dose.date.getTime()) {
                                 //create occurrence
                                 let occurrence = {
@@ -72,12 +72,15 @@ export const scheduleWeeklyOccurrences = async (userId) => {
     occurrences.forEach(day => {
         day.forEach(med => {
             user.medications.forEach(uMed => {
+                //console.log(uMed.dosages[0].reminderTime.toString());
+                //console.log(med);
                 if (med.medicationId == uMed._id) {
                     //we found the right med
                     med.datesWTime.forEach(dose => {
                         uMed.dosages.forEach(uDose => {
                             //ensure we find the right dose and that the occurrence hasn't already passed
                             let now = new Date();
+                            // console.log(dose.date.toString());
                             if (dose.dosageId == uDose._id && now.getTime() < dose.date.getTime()) {
                                 //we found the right dose
                                 //create new occurrence to add
@@ -113,6 +116,8 @@ export const scheduleWeeklyOccurrences = async (userId) => {
                         sendNotification();
                     });
                 }
+                // console.log(occurrence);
+                // console.log(occurrence.scheduledDate.toString());
             });
         });
     });
@@ -132,6 +137,16 @@ const removePastOccurrences = (user) => {
     });
     return user;
 };
+
+const removePastOccurrencesMed = (user, medE) => {
+    user.medications.forEach(med => {
+        if (medE._id == med._id) {
+            med.dosages.forEach(dosage => {
+                dosage.occurrences = [];
+            });
+        }
+    });
+}
 
 export const sendNotification = () => {
     console.log('take your medication');

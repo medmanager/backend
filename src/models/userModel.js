@@ -11,7 +11,8 @@ const Event = mongoose.model('Event', EventSchema);
 export const UserSchema = new Schema({
     email: {
         type: String,
-        required: true
+        required: true,
+        unique: true
     },
     hashPassword: {
         type: String,

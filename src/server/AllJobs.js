@@ -17,5 +17,17 @@ export const scheduleUserJobs = async () => {
         schedule.scheduleJob(user._id.toString(), time, function() {
             scheduleWeeklyOccurrences(user._id);
         });
+
+        //DEBUG PRINT STATEMENTS
+        //console.log(user)
+        // user.medications.forEach(med => {
+        //     //console.log(med);
+        //     med.dosages.forEach(dose => {
+        //         //console.log(dose);
+        //         dose.occurrences.forEach(occurrence => {
+        //             console.log(occurrence);
+        //         });
+        //     });
+        // });
     });
 }
