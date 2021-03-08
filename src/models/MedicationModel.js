@@ -1,6 +1,7 @@
+import { ObjectId } from 'bson';
 import mongoose from 'mongoose';
-import {DosageSchema} from './DosageModel'
 import {FrequencySchema} from './FrequencyModel'
+import {DosageSchema} from './DosageModel';
 
 const Schema = mongoose.Schema;
 
@@ -30,10 +31,10 @@ export const MedicationSchema = new Schema({
         type: FrequencySchema,
         required: true
     },
-    dosages: {
-        type: [DosageSchema],
-        required: true
-    },
+    dosages: [{
+        type: ObjectId,
+        ref: 'Dosage'
+    }],
     dateAdded: {
         type: Date,
         default: Date.now,
@@ -44,21 +45,9 @@ export const MedicationSchema = new Schema({
     active: {
         type: Boolean,
         default: true,
-    }
+    },
+    user: {
+        type: ObjectId,
+        ref: 'User'
+    },
 });
-
-/*  Schedules a cron job to send notification
-    Params: Dosage to be scheduled
-    Notes: Currently only works with 'days' input
-    Future Implementation:
-    - 'Weeks' cron string implementation based on createEvents implementation, should come together
-    */
-MedicationSchema.methods.scheduleDosage = (dosage) => {
-    if (dosage.sendReminder) {
-        if (self.frequency.intervalUnit == 'days') {
-            dosage.job = cron.schedule(`${dosage.reminderTime.getMinutes()} ${dosage.reminderTime.getHours()} */${self.frequency.interval} * ?`);
-        } else if (self.frequency.intervalUnit == 'weeks') {
-            dosage.job = cron.schedule(``);
-        }
-    }
-}

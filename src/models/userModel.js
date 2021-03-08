@@ -1,12 +1,8 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcrypt';
-import { MedicationSchema } from '../models/MedicationModel';
-import { EventSchema } from '../models/eventModel';
-
+import { ObjectId } from 'bson';
 
 const Schema = mongoose.Schema;
-
-const Event = mongoose.model('Event', EventSchema);
 
 export const UserSchema = new Schema({
     email: {
@@ -30,14 +26,10 @@ export const UserSchema = new Schema({
         type: Date,
         default: Date.now
     },
-    medications: {
-        type: [MedicationSchema],
-        default: []
-    },
-    currentEvents: {
-        type: [EventSchema],
-        default: []
-    }
+    medications: [{
+        type: ObjectId,
+        ref: 'Medication'
+    }],
 });
 
 UserSchema.methods.comparePassword = (password, hashPassword) => {

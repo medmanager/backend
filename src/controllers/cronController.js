@@ -1,6 +1,15 @@
 import _ from 'lodash';
 import { getScheduledDays, getUser} from './controller';
 import schedule from 'node-schedule';
+import mongoose from 'mongoose';
+import { UserSchema } from '../models/userModel';
+import { DosageSchema, OccurrenceSchema } from '../models/DosageModel';
+import { MedicationSchema } from '../models/MedicationModel';
+
+const User = mongoose.model('User', UserSchema);
+const Medication = mongoose.model('Medication', MedicationSchema);
+const Dosage = mongoose.model('Dosage', DosageSchema)
+const Occurrence = mongoose.model('Occurrence', OccurrenceSchema);
 
 /** 
  * When a new medication is added, schedule new jobs for the week
@@ -25,8 +34,16 @@ export const scheduleNewMedication = async (user, medication) => {
                                     isComplete: false,
                                     timeTaken: null,
                                     scheduledDate: dose.date,
+                                    dosage: uDose._id
                                 };
-                                uDose.occurrences.push(occurrence);
+                                try {
+                                    occurrence = new Occurrence(occurrence);
+                                    occurrence.save();
+                                    uDose.occurrences.push(occurrence._id);
+                                    uDose.save();
+                                } catch (ex) {
+                                    return {error: true};
+                                }
                             }
                         });
                     });
@@ -35,18 +52,11 @@ export const scheduleNewMedication = async (user, medication) => {
      
         })
     });
-    //SAVING USER WILL AUTO GENERATE OCCURRENCE ID'S FOR US TO USE
-    try {
-        user = await user.save();
-    } catch (err) {
-        //not quite sure what to do when user fails to save
-        console.log("user cannot be saved");
-        return {error: true};
-    }
     user.medications.forEach(med => {
         //find new med
         if (medication._id == med._id) {
-            med.dosages.forEach(dosage => {
+            med.dosages.forEach(async (dosage) => {
+                await dosage.populate('occurrences').execPopulate();
                 dosage.occurrences.forEach(occurrence => {
                     //only schedule a job for the dose if reminders are toggled
                     if (dosage.sendReminder) {
@@ -58,7 +68,7 @@ export const scheduleNewMedication = async (user, medication) => {
             });
         }
     });
-    return {error: false};
+    return {error: false}
 };
 
 /**

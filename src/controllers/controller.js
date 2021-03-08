@@ -1,30 +1,65 @@
 import mongoose from 'mongoose';
 import { UserSchema } from '../models/userModel';
+import { DosageSchema, OccurrenceSchema } from '../models/DosageModel';
+import { MedicationSchema } from '../models/MedicationModel';
 import https from 'https';
 import _ from 'lodash';
 import { scheduleNewMedication } from './cronController';
 import schedule from 'node-schedule';
 
 const User = mongoose.model('User', UserSchema);
+const Medication = mongoose.model('Medication', MedicationSchema);
+const Dosage = mongoose.model('Dosage', DosageSchema)
+const Occurrence = mongoose.model('Occurrence', OccurrenceSchema);
 
 // add a new medication
 export const addNewMedication = (req, res) => {
+    console.log("this happnes");
     if (req.user == null) {
         res.send({error: true, message: "token error: cannot find user from token!"});
     }
+    let dosages = req.body.dosages;
     let newMedication = req.body;
-    User.findById(req.user, (err, user) => {
+    newMedication.dosages = [];
+    newMedication = new Medication(newMedication);
+    User.findById(req.user, async (err, user) => {
         if (err) {
-            res.send(err);
+            res.send({error: true, message: "cannot find user!"});
         } else {
-            user.medications.push(newMedication);
-
-            //schedule new occurrences for this week
-            //and save user
-            let resp = scheduleNewMedication(user, newMedication);
-            if (resp.error) res.send(resp.message);
+            //first save all the dosages and collect the unique ids to place in the medication
+            let dosageIds = [];
+            if (dosages != null) {
+                dosages.forEach(dosage => {
+                    let newDosage = new Dosage(dosage);
+                    newDosage.medication = newMedication._id;
+                    dosageIds.push(newDosage._id);
+                    newDosage.save(err1 => {
+                        if (err1) res.send({error: true, message: "cannot save dosage!"});
+                    });
+                });
+            }
+            //update references
+            newMedication.dosages = dosageIds;
+            newMedication.user = user._id;
+            //push new medicationId onto the user's list of medications
+            user.medications.push(newMedication._id);
+            //save both the new medication and the user
+            await newMedication.save(err2 => {
+                if (err2) res.send({error: true, message: "cannot save medication!"});
+            });
+            await user.save(err3 => {
+                if (err3) res.send({error: true, message: "cannot save user!"});
+            });
+            //we need to fully populate user for schedule code to work
+            //this is expensive, but the only other option is rewrite schedule code
+            await user.populate('medications').execPopulate();
+            await user.medications.forEach(async (med) => {
+                await med.populate('dosages').execPopulate();
+            });
+            let resp = await scheduleNewMedication(user, newMedication, dosages);
+            if (resp.error) res.send({error: true, message: "error scheduling new medication!"});
             //newMedication doesn't contain occurrences so send updated version
-            else res.json(user.medications[user.medications.length - 1]);
+            res.json({error: false, medication: newMedication});
         }
     });
 };
@@ -35,9 +70,14 @@ export const getMedications = (req, res) => {
     }
     User.findOne({ _id: req.user }, (err, user) => {
         if (err) {
-            res.send(err);
+            res.send({error: true, message: "cannot find user!"});
         } else {
-            res.send(user.medications);
+            Medication.find({_id: {$in: user.medications}}).populate('dosages').exec((err, medications) => {
+                if (err) res.send({error: true, message: "cannot find medications!"});
+                else {
+                    res.send({error: false, medications: medications});
+                }
+            });
         }
     });
 };

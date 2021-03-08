@@ -35,7 +35,7 @@ app.use((req, res, next) => {
 });
 
 //when server reloads we must schedule all of the jobs for our 
-scheduleUserJobs();
+//scheduleUserJobs();
 
 routes(app);
 
