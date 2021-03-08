@@ -1,20 +1,20 @@
-import mongoose from 'mongoose';
-import UserSchema from '../models/userModel';
-import {scheduleWeeklyOccurrences} from '../controllers/cronController';
-import schedule from 'node-schedule';
+import mongoose from "mongoose";
+import schedule from "node-schedule";
+import { scheduleWeeklyOccurrences } from "../controllers/cronController";
+import UserSchema from "../models/User";
 
-let User = mongoose.model('User', UserSchema);
+let User = mongoose.model("User", UserSchema);
 
 export const scheduleUserJobs = async () => {
     let users = await User.find({});
-    users.forEach(user => {
+    users.forEach((user) => {
         //first schedule doses for this week
         scheduleWeeklyOccurrences(user._id);
 
         let time = "0 0 * * 0"; //run every week at the start of each Sunday
         //nodeschedule allows editing of jobs based off user id, so pass in user._id
         //kind of weird, but id must be a string
-        schedule.scheduleJob(user._id.toString(), time, function() {
+        schedule.scheduleJob(user._id.toString(), time, function () {
             scheduleWeeklyOccurrences(user._id);
         });
 
@@ -30,4 +30,4 @@ export const scheduleUserJobs = async () => {
         //     });
         // });
     });
-}
+};

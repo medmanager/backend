@@ -1,5 +1,4 @@
-import { ObjectId } from 'bson';
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
 const Schema = mongoose.Schema;
 
@@ -15,31 +14,33 @@ export const OccurrenceSchema = new Schema({
     },
     scheduledDate: {
         type: Date,
-    }, 
+    },
     dosage: {
-        type: ObjectId,
-        ref: 'Dosage'
+        type: Schema.Types.ObjectId,
+        ref: "Dosage",
     },
 });
 
 export const DosageSchema = new Schema({
     dose: {
         type: Number,
-        default: 1
+        default: 1,
     },
     sendReminder: {
         type: Boolean,
-        default: true
+        default: true,
     },
     reminderTime: {
-        type: Date
+        type: Date,
     },
-    occurrences: [{
-        type: ObjectId,
-        ref: 'Occurrence'
-    }],
+    occurrences: [
+        {
+            type: Schema.Types.ObjectId,
+            ref: "Occurrence",
+        },
+    ],
     medication: {
-        type: ObjectId,
-        ref: 'Medication'
-    }
+        type: Schema.Types.ObjectId,
+        ref: "Medication",
+    },
 });

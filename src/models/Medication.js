@@ -1,40 +1,40 @@
-import { ObjectId } from 'bson';
-import mongoose from 'mongoose';
-import {FrequencySchema} from './FrequencyModel'
-import {DosageSchema} from './DosageModel';
+import mongoose from "mongoose";
+import { FrequencySchema } from "./Frequency";
 
 const Schema = mongoose.Schema;
 
 export const MedicationSchema = new Schema({
     name: {
         type: String,
-        required: 'enter a medication name',
+        required: "Medication name is required",
     },
     notes: String,
     strength: {
         type: Number,
-        required: true
+        required: true,
     },
     strengthUnit: {
         type: String,
-        required: true
+        required: true,
     },
     amount: {
         type: Number,
-        required: true
+        required: true,
     },
     amountUnit: {
         type: String,
-        required: true
+        required: true,
     },
     frequency: {
         type: FrequencySchema,
-        required: true
+        required: true,
     },
-    dosages: [{
-        type: ObjectId,
-        ref: 'Dosage'
-    }],
+    dosages: [
+        {
+            type: Schema.Types.ObjectId,
+            ref: "Dosage",
+        },
+    ],
     dateAdded: {
         type: Date,
         default: Date.now,
@@ -47,7 +47,7 @@ export const MedicationSchema = new Schema({
         default: true,
     },
     user: {
-        type: ObjectId,
-        ref: 'User'
+        type: Schema.Types.ObjectId,
+        ref: "User",
     },
 });
