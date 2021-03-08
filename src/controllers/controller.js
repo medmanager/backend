@@ -46,7 +46,7 @@ export const addNewMedication = async (req, res) => {
         user.medications.push(newMedication);
         await user.save();
     } catch (err) {
-        console.log({ err });
+        console.log(err);
         return res.status(500).json({
             message: "cannot save medication!",
         });
@@ -74,7 +74,7 @@ export const addNewMedication = async (req, res) => {
         await scheduleNewMedication(user, newMedication);
     } catch (err) {
         console.error(err);
-        return res.status(500).send({
+        return res.status(500).json({
             message: "error scheduling new medication!",
         });
     }
@@ -84,26 +84,26 @@ export const addNewMedication = async (req, res) => {
 
 export const getMedications = (req, res) => {
     if (req.user == null) {
-        res.status(400).send({
+        return res.status(400).json({
             message: "token error: cannot find user from token!",
         });
     }
+
     User.findById(req.user, (err, user) => {
         if (err) {
             return res.send(err);
-        } else {
-            Medication.find({ _id: { $in: user.medications } })
-                .populate("dosages")
-                .exec((err, medications) => {
-                    if (err)
-                        return res.status(404).send({
-                            message: "cannot find medications!",
-                        });
-                    else {
-                        return res.status(200).send(medications);
-                    }
-                });
         }
+
+        Medication.find({ _id: { $in: user.medications } })
+            .populate("dosages")
+            .exec((err, medications) => {
+                if (err)
+                    return res.status(404).send({
+                        message: "cannot find medications!",
+                    });
+
+                return res.status(200).send(medications);
+            });
     });
 };
 
@@ -191,33 +191,33 @@ export const deleteMedicationFromID = (req, res) => {
     User.findOne({ _id: req.user }, (err, user) => {
         if (err) {
             return res.send(err);
-        } else {
-            let medId = req.params.medicationID;
-            if (medId == null)
-                return res.status(404).json({
-                    message: "cannot find medication!",
-                });
-            let i = 0;
-            let notFound = true;
-            let med = null;
-            for (i = 0; i < user.medications.length && notFound; i++) {
-                if (user.medications[i]._id == medId) {
-                    med = user.medications.splice(i, 1);
-                    notFound = false;
-                }
-            }
-            if (notFound)
-                return res.status(404).json({
-                    message: "cannot find medication!",
-                });
-            user.save((err) => {
-                if (err)
-                    return res.status(500).json({
-                        message: "cannot delete medication",
-                    });
-                return res.status(200).json(med);
-            });
         }
+
+        let medId = req.params.medicationID;
+        if (medId == null)
+            return res.status(404).json({
+                message: "cannot find medication!",
+            });
+        let i = 0;
+        let notFound = true;
+        let med = null;
+        for (i = 0; i < user.medications.length && notFound; i++) {
+            if (user.medications[i]._id == medId) {
+                med = user.medications.splice(i, 1);
+                notFound = false;
+            }
+        }
+        if (notFound)
+            return res.status(404).json({
+                message: "cannot find medication!",
+            });
+        user.save((err) => {
+            if (err)
+                return res.status(500).json({
+                    message: "cannot delete medication",
+                });
+            return res.status(200).json(med);
+        });
     });
 };
 
@@ -251,12 +251,12 @@ export const fuzzySearchWithString = (req, res) => {
                 //We could just return respData.suggestionGroup.suggestionList...
                 //but if we want to do any further searching on the matches, it
                 //is easier if they are in an accessible array
-                res.json(matches);
+                return res.json(matches);
             });
         }
     );
     req2.on("error", (error) => {
-        res.status(500).send(error);
+        return res.send(error);
     });
     req2.end();
 };
@@ -267,21 +267,22 @@ export const fuzzySearchWithString = (req, res) => {
 export const getDosages = (req, res) => {
     let userId = req.user;
     if (userId == null) {
-        res.status(404).send({ message: "token invalid: cannot get user" });
-        return;
+        return res
+            .status(404)
+            .json({ message: "token invalid: cannot get user" });
     }
+
     return User.findById({ _id: userId }, (err, user) => {
         if (err) {
-            res.status(404).json({ message: "cannot find user!" });
-        } else {
-            let dosages = [];
-            user.medications.forEach((med) => {
-                med.dosages.forEach((dosage) => {
-                    dosages.push(dosage);
-                });
-            });
-            res.status(200).json({ dosages: dosages });
+            return res.status(404).json({ message: "cannot find user!" });
         }
+        let dosages = [];
+        user.medications.forEach((med) => {
+            med.dosages.forEach((dosage) => {
+                dosages.push(dosage);
+            });
+        });
+        return res.status(200).json({ dosages: dosages });
     });
 };
 
@@ -332,7 +333,7 @@ export const getOccurrences = async (req, res) => {
 /*function to post when a medication is taken */
 export const addOccurrence = (req, res) => {
     if (req.user == null) {
-        return res.status(400).send({
+        return res.status(400).json({
             message: "token error: cannot find user from token!",
         });
     }
@@ -341,7 +342,7 @@ export const addOccurrence = (req, res) => {
     let medicationId = req.body.medicationId;
     let dosageId = req.body.dosageId;
     if (occurrence == null || medicationId == null || dosageId == null) {
-        return res.status(400).send({ message: "missing occurrence data!" });
+        return res.status(400).json({ message: "missing occurrence data!" });
     }
 
     User.findOne({ _id: userId }, (err, user) => {
@@ -355,13 +356,13 @@ export const addOccurrence = (req, res) => {
             if (medIndex == -1) {
                 return res
                     .status(404)
-                    .send({ message: "cannot find medication!" });
+                    .json({ message: "cannot find medication!" });
             }
             let dosageIndex = user.medications[medIndex].dosages.findIndex(
                 (dosage) => dosage._id == dosageId
             );
             if (dosageIndex == -1) {
-                return res.status(404).send({ message: "cannot find dosage!" });
+                return res.status(404).json({ message: "cannot find dosage!" });
             }
             let occurrenceIndex = user.medications[medIndex].dosages[
                 dosageIndex
@@ -371,7 +372,7 @@ export const addOccurrence = (req, res) => {
             if (occurrenceIndex == -1) {
                 return res
                     .status(404)
-                    .send({ message: "cannot find occurrence!" });
+                    .json({ message: "cannot find occurrence!" });
             }
             user.medications[medIndex].dosages[dosageIndex].occurrences[
                 occurrenceIndex
@@ -401,7 +402,7 @@ export const addOccurrence = (req, res) => {
                     job.cancel();
                 }
             }
-            return res.status(200).send({ occurrence: occurrenceToUpdate });
+            return res.status(200).json(occurrenceToUpdate);
         }
     });
 };

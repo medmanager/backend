@@ -28,12 +28,12 @@ app.use((req, res, next) => {
         jsonwebtoken.verify(
             req.headers.authorization.split(" ")[1],
             "ATLBANANA",
-            (err, decode) => {
+            (err, user) => {
                 if (err) {
                     req.user = undefined;
                     next();
                 } else {
-                    req.user = decode._id;
+                    req.user = user._id;
                     next();
                 }
             }
