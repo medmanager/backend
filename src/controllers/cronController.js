@@ -14,9 +14,8 @@ const Occurrence = mongoose.model("Occurrence", OccurrenceSchema);
  * and store array of occurrences
  * ASSUME OTHER MEDS HAVE ALREADY BEEN SCHEDULED
  */
-export const scheduleNewMedication = async (medication) => {
+export const scheduleMedication = async (medication) => {
     let scheduledDays = getScheduledMedicationDays(medication);
-
     scheduledDays.forEach((day) => {
         day.forEach((dosageOccurrence) => {
             //need to ensure only schedule occurrences for dosagesIds on medication

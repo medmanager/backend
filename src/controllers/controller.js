@@ -4,7 +4,7 @@ import schedule from "node-schedule";
 import { DosageSchema, OccurrenceSchema } from "../models/Dosage";
 import { MedicationSchema } from "../models/Medication";
 import { UserSchema } from "../models/User";
-import { scheduleNewMedication } from "./cronController";
+import { scheduleMedication } from "./cronController";
 
 const User = mongoose.model("User", UserSchema);
 const Medication = mongoose.model("Medication", MedicationSchema);
@@ -57,12 +57,11 @@ export const addNewMedication = async (req, res) => {
         .populate({
             path: "dosages",
             model: "Dosage",
-            populate: { path: "occurrences", model: "Occurrence" },
         })
         .execPopulate();
 
     try {
-        await scheduleNewMedication(newMedication);
+        await scheduleMedication(newMedication);
     } catch (err) {
         console.error(err);
         return res.status(500).json({
@@ -108,6 +107,7 @@ export const getMedicationFromID = async (req, res) => {
     try {
         medication = await Medication.findById(medId);
 
+        //ensure that the medication id matches the same user that sent the request
         if (!medication.user.equals(req.user))
             return res.status(401).json({
                 message: "You are not authorized to view this medication",
@@ -117,60 +117,94 @@ export const getMedicationFromID = async (req, res) => {
     }
 
     if (!medication) {
-        return res.status(404).json({ message: "Medication not found" });
+        return res.status(404).json({ message: "Medication not found!" });
     }
 
     await medication.populate("dosages").execPopulate();
     return res.json(medication);
 };
 
-export const updateMedicationFromID = (req, res) => {
+export const updateMedicationFromID = async (req, res) => {
     if (req.user == null) {
         return res.status(400).json({
             message: "token error: cannot find user from token!",
         });
     }
-    User.findOne({ _id: req.user }, (err, user) => {
-        if (err) return res.send(err);
-
-        let medId = req.params.medicationID;
-        if (medId == null) {
-            return res.status(404).json({
-                message: "cannot find medication!",
-            });
-        } else if (medId != req.body._id) {
-            return res.status(404).json({
-                message: "medicationIds do not match!",
-            });
-        }
-        const med = req.body;
-        if (med == null)
-            return res.status(404).json({
-                message: "cannot find medication!",
-            });
-        let i = 0;
-        let notFound = true;
-        for (i = 0; i < user.medications.length && notFound; i++) {
-            if (user.medications[i]._id == medId) {
-                user.medications[i] = med;
-                console.log(user.medications[i]);
-                notFound = false;
-            }
-        }
-        if (notFound)
-            return res.status(404).json({
-                message: "cannot find medication!",
-            });
-
-        let resp = scheduleNewMedication(user, med);
-        if (resp.error) {
-            return res.send(resp.message);
-        }
-
+    const medId = req.params.medicationID;
+    if (!medId) {
+        return res.status(400).send({ message: "Medication id is required" });
+    } else if (medId != req.body._id) {
         return res
-            .status(200)
-            .json(user.medications.find((medE) => medE._id == med._id));
+            .status(404)
+            .send({ message: "Medication IDs do not match!" });
+    }
+    let medication;
+    try {
+        medication = await Medication.findById(medId);
+        if (!medication) {
+            return res.status(404).json({ message: "Medication not found!" });
+        }
+        //ensure the medication to be updated exists
+        if (!medication.user.equals(req.user)) {
+            return res.status(401).json({
+                message: "You are not authorized to edit this medication",
+            });
+        }
+    } catch (err) {
+        return res.send(err);
+    }
+    //we need to invalidate the previous dosages
+    //if a dosage doesn't have an _id, we can assume it's a new dosage
+    let existingDosages = [];
+    let oldDosages = [];
+    medication.dosages.forEach((dosage) => {
+        let d = req.body.dosages.find((dose) => dose._id == dosage);
+        if (d != undefined) {
+            existingDosages.push(dosage);
+        } else {
+            oldDosages.push(dosage);
+        }
     });
+    let newDosages = req.body.dosages.filter((dosage) => dosage._id == null);
+    //we have existingDosages, oldDosages, and newDosages
+
+    try {
+        //newDosages need to be added to the database and their occurrences need to be scheduled
+        newDosages.map((d) => {
+            d = new Dosage(d);
+            d.medication = medId;
+        });
+        Dosage.insertMany(newDosages);
+
+        let activeDosages = existingDosages.concat(
+            newDosages.map((d) => d._id)
+        );
+        //existingDosages need to be updated because it's possible they've changed
+        //oldDosages need to be invalidated and the occurrences need to be descheduled
+        //in either case, we should deschedule all future occurrences
+        descheduleAndDeleteFutureOccurrences(
+            oldDosages.concat(existingDosages)
+        );
+        //mark all the dosages as inactive
+        oldDosages = await Dosage.findAndModify({
+            query: { _id: { $in: oldDosages } },
+            update: { $inc: { active: false } },
+        });
+
+        //update the medication with inactive and active dosages
+        medication.inactiveDosages = oldDosages;
+        medication.dosages = activeDosages;
+        await medication.save();
+
+        //finally schedule the future active dosages for the rest of week
+        await scheduleMedication(medication);
+    } catch (err) {
+        return res
+            .status(404)
+            .json({ message: "error updating medication information!" });
+    }
+
+    return res.status(200).json(medication);
 };
 
 export const deleteMedicationFromID = (req, res) => {
@@ -464,4 +498,41 @@ const getWeeklyOccurrences = (user) => {
         day.sort((a, b) => b.occurrence.date - a.occurrence.date);
     });
     return scheduledDays;
+};
+
+/**
+ * Given an array of dosageIds, deschedule all future occurrences that
+ * correspond to the given dosageIds,
+ */
+const descheduleAndDeleteFutureOccurrences = (dosages) => {
+    dosages.forEach(async (dosageId) => {
+        //first get the dosage and populate the occurrences
+        let dosage = await Dosage.findById(dosageId);
+        await dosage.populate("occurrences").execPopulate();
+        //we only want to remove occurrences that haven't happened yet
+        let now = new Date();
+        let occurrencesToRemove = dosage.occurrences.filter(
+            (occ) =>
+                !occ.isComplete && occ.scheduledDate.getTime() > now.getTime()
+        );
+        //deschedule the occurrences
+        occurrencesToRemove.forEach((occurrence) => {
+            let key = occurrence._id.toString();
+            if (key in schedule.scheduledJobs) {
+                const job = schedule.scheduledJobs[key];
+                if (job != null && job != undefined) {
+                    job.cancel();
+                }
+            }
+        });
+        //delete the occurrences
+        await Occurrence.deleteMany(occurrencesToRemove, (err) => {
+            if (err) console.log("error deleting occurrences");
+        });
+        //remove the deleted occurrences from the dosage
+        dosage.occurrences = dosage.occurrences.filter((occ) => {
+            !occurrencesToRemove.includes(occ);
+        });
+        await dosage.save();
+    });
 };

@@ -35,6 +35,12 @@ export const MedicationSchema = new Schema({
             ref: "Dosage",
         },
     ],
+    inactiveDosages: [
+        {
+            type: Schema.Types.ObjectId,
+            ref: "Dosage",
+        },
+    ],
     dateAdded: {
         type: Date,
         default: Date.now,
