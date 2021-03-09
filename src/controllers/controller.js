@@ -186,9 +186,10 @@ export const updateMedicationFromID = async (req, res) => {
             oldDosages.concat(existingDosages)
         );
         //mark all the dosages as inactive
+        let now = new Date();
         oldDosages = await Dosage.findAndModify({
             query: { _id: { $in: oldDosages } },
-            update: { $inc: { active: false } },
+            update: { $inc: { active: false, inactiveDate: now } },
         });
 
         //update the medication with inactive and active dosages
@@ -203,7 +204,7 @@ export const updateMedicationFromID = async (req, res) => {
             .status(404)
             .json({ message: "error updating medication information!" });
     }
-
+    await medication.populate("dosages").execPopulate();
     return res.status(200).json(medication);
 };
 
