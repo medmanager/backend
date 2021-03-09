@@ -7,7 +7,10 @@ let User = mongoose.model("User", UserSchema);
 
 export const scheduleUserJobs = async () => {
     let users = await User.find({});
-    users.forEach((user) => {
+
+    users.forEach(async (user) => {
+        //completely populate user before initial schedule code is called
+
         //first schedule doses for this week
         scheduleWeeklyOccurrences(user._id);
 

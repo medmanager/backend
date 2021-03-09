@@ -3,6 +3,7 @@ import express from "express";
 import jsonwebtoken from "jsonwebtoken";
 import mongoose from "mongoose";
 import routes from "./src/routes/Routes";
+import { scheduleUserJobs } from "./src/server/AllJobs";
 
 const app = express();
 const PORT = 4000; //to run local
@@ -45,7 +46,7 @@ app.use((req, res, next) => {
 });
 
 //when server reloads we must schedule all of the jobs for our
-//scheduleUserJobs();
+scheduleUserJobs();
 
 routes(app);
 
