@@ -92,7 +92,7 @@ export const getMedications = (req, res) => {
                         message: "cannot find medications!",
                     });
 
-                return res.status(200).send(medications);
+                return res.status(200).json(medications);
             });
     });
 };
@@ -401,30 +401,37 @@ export const addOccurrence = async (req, res) => {
             message: "token error: cannot find user from token!",
         });
     }
-    let occurrence = req.body;
-    if (occurrence == undefined) {
+    let occurrenceP = req.body;
+    if (occurrenceP == undefined) {
         return res.status(400).json({ message: "missing occurrence data!" });
     }
-
-    //check that the occurrence belongs to the user posting it
-    let dosage = await Dosage.findById(occurrence.dosage);
-    let medication = await Dosage.findById(dosage.medication);
-    if (!medication.user.equals(req.user)) {
+    let occurrence = null;
+    try {
+        occurrence = await Occurrence.findById(occurrenceP._id);
+        //check that the occurrence belongs to the user posting it
+        let dosage = await Dosage.findById(occurrence.dosage);
+        let medication = await Medication.findById(dosage.medication);
+        if (!medication.user.equals(req.user)) {
+            return res.status(401).json({
+                message: "You are not authorized to edit this occurrence",
+            });
+        }
+    } catch (err) {
         return res.status(401).json({
-            message: "You are not authorized to edit this occurrence",
+            message:
+                "Error finding dosage and medication that correspond with the occurrence",
         });
     }
 
     //update occurrence
     Occurrence.findOneAndUpdate(
+        { _id: occurrence._id },
         {
-            query: { _id: occurrence._id },
-            update: {
-                isTaken: occurrence.isTaken,
-                isComplete: true,
-                timeTaken: occurrence.timeTaken,
-            },
+            isTaken: occurrenceP.isTaken,
+            isComplete: true,
+            timeTaken: occurrenceP.timeTaken,
         },
+        { new: true },
         (err, occurrenceToUpdate) => {
             if (err) {
                 return res

@@ -13,6 +13,7 @@ mongoose.Promise = global.Promise;
 mongoose.connect("mongodb://localhost/MedManagerdb", {
     useNewUrlParser: true,
     useUnifiedTopology: true,
+    useFindAndModify: false,
 });
 
 // bodyparser setup

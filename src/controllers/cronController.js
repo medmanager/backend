@@ -28,7 +28,7 @@ export const scheduleMedication = async (medication) => {
                         isComplete: false,
                         timeTaken: null,
                         scheduledDate: dose.date,
-                        dosage: dose._id,
+                        dosage: dose.dosageId,
                     };
                     //not sure if we can use findOneAndUpdate here
                     //since we need to be able to add occurrence to the queue
@@ -90,7 +90,7 @@ export const scheduleWeeklyOccurrences = async (userId) => {
                         isComplete: false,
                         timeTaken: null,
                         scheduledDate: dose.date,
-                        dosage: dose._id,
+                        dosage: dose.dosageId,
                     };
                     let uDose = await Dosage.findOne({ _id: dose.dosageId });
                     occurrence = new Occurrence(occurrence);
