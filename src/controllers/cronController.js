@@ -126,13 +126,13 @@ export const scheduleWeeklyOccurrences = async (userId) => {
  * This is to ensure we don't over populate the occurrences, since
  * we only want to schedule each future occurrence once.
  */
-const removeFutureOccurrences = (user) => {
-    user.medications.forEach((med) => {
-        med.dosages.forEach((dosage) => {
+const removeFutureOccurrences = async (user) => {
+    user.medications.forEach(async (med) => {
+        med.dosages.forEach(async (dosage) => {
             //first find all occurrences attached to dosage
             Occurrence.find(
                 { _id: { $in: dosage.occurrences } },
-                (err, occurrences) => {
+                async (err, occurrences) => {
                     if (err) {
                         console.log("cannot find occurrences");
                         return;
@@ -147,12 +147,12 @@ const removeFutureOccurrences = (user) => {
                         );
                         //obtain an array of ids from the array of occurrence objects
                         let occurrenceIds = occurrencesToRemove.map(
-                            (occ) => occ._id
+                            (occ) => (occ = occ._id)
                         );
                         //delete all future occurrences
-                        Occurrence.deleteMany(
+                        await Occurrence.deleteMany(
                             { _id: { $in: occurrenceIds } },
-                            (err) => {
+                            (err, occurrences) => {
                                 if (err) {
                                     console.log(
                                         "cannot delete future occurrences"
@@ -161,6 +161,14 @@ const removeFutureOccurrences = (user) => {
                                 }
                             }
                         );
+                        let d = await Dosage.findById(dosage._id);
+                        occurrenceIds.forEach((occId) => {
+                            let index = d.occurrences.indexOf(occId);
+                            if (index != -1) {
+                                d.occurrences.splice(index, 1);
+                            }
+                        });
+                        await d.save();
                     }
                 }
             );
