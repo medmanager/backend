@@ -216,14 +216,17 @@ export const deleteMedicationFromID = async (req, res) => {
     }
 
     //ensure user has permission to delete this medication
-    let medicationToRemove = Medication.findById(
+    let medicationToRemove = await Medication.findById(
         req.params.medicationID,
         (err, medication) => {
             if (err) {
                 return res.status(404).json({
                     message: "cannot find medication!",
                 });
-            } else if (!medication.user.equals(req.user)) {
+            } else if (
+                medication == undefined ||
+                !medication.user.equals(req.user)
+            ) {
                 return res.status(404).json({
                     message: "user not authorized to delete this medication!",
                 });
@@ -258,14 +261,14 @@ export const deleteMedicationFromID = async (req, res) => {
             await Occurrence.deleteMany({ _id: { $in: dosage.occurrences } });
         });
 
-        Dosage.deleteMany({
+        await Dosage.deleteMany({
             _id: {
                 $in: medicationToRemove.dosages.concat(
                     medicationToRemove.inactiveDosages
                 ),
             },
         });
-        Medication.deleteOne({ _id: medicationToRemove._id });
+        await Medication.deleteOne({ _id: medicationToRemove._id });
         //find the user and delete the medication reference
         let user = await User.findById(medicationToRemove.user);
         let index = user.medications.indexOf(medicationToRemove._id);
@@ -277,6 +280,7 @@ export const deleteMedicationFromID = async (req, res) => {
             .status(200)
             .json({ message: "Successfully deleted medication!" });
     } catch (err) {
+        console.log(err);
         return res.status(404).json({ message: "Cannot delete medication!" });
     }
 };
