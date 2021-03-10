@@ -16,10 +16,11 @@ const Occurrence = mongoose.model("Occurrence", OccurrenceSchema);
  */
 export const scheduleMedication = async (medication) => {
     let scheduledDays = getScheduledMedicationDays(medication);
-    scheduledDays.forEach((day) => {
-        day.forEach((dosageOccurrence) => {
+    //DO NOT USE .forEach because it won't loop asynchronously
+    for (let day of scheduledDays) {
+        for (let dosageOccurrence of day) {
             //need to ensure only schedule occurrences for dosagesIds on medication
-            dosageOccurrence.datesWTime.forEach(async (dose) => {
+            for (let dose of dosageOccurrence.datesWTime) {
                 let now = new Date();
                 if (now.getTime() < dose.date.getTime()) {
                     //create occurrence
@@ -35,27 +36,23 @@ export const scheduleMedication = async (medication) => {
                     let uDose = await Dosage.findOne({ _id: dose.dosageId });
                     occurrence = new Occurrence(occurrence);
                     await occurrence.save();
-                    uDose.occurrences.push(occurrence);
+                    uDose.occurrences.push(occurrence._id);
                     await uDose.save();
                 }
-            });
-        });
-    });
-    await newMedication
+            }
+        }
+    }
+    await medication
         .populate({
             path: "dosages",
             model: "Dosage",
+            populate: { path: "occurrences", model: "Occurrence" },
         })
         .execPopulate();
-    console.log(medication);
-    medication.dosages.forEach(async (dosage) => {
-        console.log(dosage);
-        await dosage.populate("occurrences").execPopulate();
-        console.log(dosage);
+    medication.dosages.forEach((dosage) => {
         dosage.occurrences.forEach((occurrence) => {
             //only schedule a job for the dose if reminders are toggled
             if (dosage.sendReminder) {
-                console.log(occurrence.scheduledDate.toString());
                 schedule.scheduleJob(
                     occurrence._id.toString(),
                     occurrence.scheduledDate,
@@ -63,7 +60,6 @@ export const scheduleMedication = async (medication) => {
                         sendNotification();
                     }
                 );
-                console.log(schedule);
             }
         });
     });
@@ -86,12 +82,17 @@ export const scheduleWeeklyOccurrences = async (userId) => {
             populate: { path: "dosages", model: "Dosage" },
         })
         .execPopulate();
-    removeFutureOccurrences(user);
+    try {
+        await removeFutureOccurrences(user);
+    } catch (err) {
+        console.log(err);
+        return;
+    }
     let occurrences = getScheduledDays(user);
-    occurrences.forEach((day) => {
-        day.forEach((med) => {
+    for (let day of occurrences) {
+        for (let med of day) {
             //we found the right med
-            med.datesWTime.forEach(async (dose) => {
+            for (let dose of med.datesWTime) {
                 //ensure that the occurrence hasn't already passed
                 let now = new Date();
                 if (now.getTime() < dose.date.getTime()) {
@@ -105,14 +106,24 @@ export const scheduleWeeklyOccurrences = async (userId) => {
                     };
                     let uDose = await Dosage.findOne({ _id: dose.dosageId });
                     occurrence = new Occurrence(occurrence);
-                    occurrence.save();
+                    await occurrence.save();
                     uDose.occurrences.push(occurrence);
-                    uDose.save();
+                    await uDose.save();
                 }
-            });
-        });
-    });
-
+            }
+        }
+    }
+    await user
+        .populate({
+            path: "medications",
+            model: "Medication",
+            populate: {
+                path: "dosages",
+                model: "Dosage",
+                populate: { path: "occurrences", model: "Occurrence" },
+            },
+        })
+        .execPopulate();
     //SAVING USER WILL AUTO GENERATE OCCURRENCE ID'S FOR US TO USE
     user.medications.forEach((med) => {
         med.dosages.forEach((dosage) => {
@@ -139,53 +150,46 @@ export const scheduleWeeklyOccurrences = async (userId) => {
  * we only want to schedule each future occurrence once.
  */
 const removeFutureOccurrences = async (user) => {
-    user.medications.forEach(async (med) => {
-        med.dosages.forEach(async (dosage) => {
+    for (let med of user.medications) {
+        for (let dosage of med.dosages) {
             //first find all occurrences attached to dosage
-            Occurrence.find(
-                { _id: { $in: dosage.occurrences } },
-                async (err, occurrences) => {
+            let occurrences = await Occurrence.find({
+                _id: { $in: dosage.occurrences },
+            });
+            //get all occurrences that are scheduled to occur after
+            //the current date
+            let now = new Date();
+            let occurrencesToRemove = occurrences.filter(
+                (occurrence) =>
+                    occurrence.scheduledDate.getTime() > now.getTime()
+            );
+            //obtain an array of ids from the array of occurrence objects
+            let occurrenceIds = occurrencesToRemove.map(
+                (occ) => (occ = occ._id)
+            );
+            //delete all future occurrences
+            let d = await Dosage.findById(dosage._id);
+
+            occurrenceIds.forEach((occId) => {
+                let index = d.occurrences.indexOf(occId);
+                if (index != -1) {
+                    d.occurrences.splice(index, 1);
+                }
+            });
+
+            await Occurrence.deleteMany(
+                { _id: { $in: occurrenceIds } },
+                (err) => {
                     if (err) {
-                        console.log("cannot find occurrences");
+                        console.log("cannot delete future occurrences");
                         return;
-                    } else {
-                        //get all occurrences that are scheduled to occur after
-                        //the current date
-                        let now = new Date();
-                        let occurrencesToRemove = occurrences.filter(
-                            (occurrence) =>
-                                occurrence.scheduledDate.getTime() >
-                                now.getTime()
-                        );
-                        //obtain an array of ids from the array of occurrence objects
-                        let occurrenceIds = occurrencesToRemove.map(
-                            (occ) => (occ = occ._id)
-                        );
-                        //delete all future occurrences
-                        await Occurrence.deleteMany(
-                            { _id: { $in: occurrenceIds } },
-                            (err, occurrences) => {
-                                if (err) {
-                                    console.log(
-                                        "cannot delete future occurrences"
-                                    );
-                                    return;
-                                }
-                            }
-                        );
-                        let d = await Dosage.findById(dosage._id);
-                        occurrenceIds.forEach((occId) => {
-                            let index = d.occurrences.indexOf(occId);
-                            if (index != -1) {
-                                d.occurrences.splice(index, 1);
-                            }
-                        });
-                        await d.save();
                     }
                 }
             );
-        });
-    });
+
+            await Dosage.findByIdAndUpdate(dosage._id, d);
+        }
+    }
 };
 
 const sendNotification = () => {
