@@ -187,7 +187,7 @@ export const updateMedicationFromID = async (req, res) => {
         );
         //mark all the dosages as inactive
         let now = new Date();
-        oldDosages = await Dosage.findAndModify({
+        oldDosages = await Dosage.findAndUpdate({
             query: { _id: { $in: oldDosages } },
             update: { $inc: { active: false, inactiveDate: now } },
         });
@@ -208,43 +208,77 @@ export const updateMedicationFromID = async (req, res) => {
     return res.status(200).json(medication);
 };
 
-export const deleteMedicationFromID = (req, res) => {
+export const deleteMedicationFromID = async (req, res) => {
     if (req.user == null) {
         return res.status(400).json({
             message: "token error: cannot find user from token!",
         });
     }
-    User.findOne({ _id: req.user }, (err, user) => {
-        if (err) {
-            return res.send(err);
-        }
 
-        let medId = req.params.medicationID;
-        if (medId == null)
-            return res.status(404).json({
-                message: "cannot find medication!",
-            });
-        let i = 0;
-        let notFound = true;
-        let med = null;
-        for (i = 0; i < user.medications.length && notFound; i++) {
-            if (user.medications[i]._id == medId) {
-                med = user.medications.splice(i, 1);
-                notFound = false;
+    //ensure user has permission to delete this medication
+    let medicationToRemove = Medication.findById(
+        req.params.medicationID,
+        (err, medication) => {
+            if (err) {
+                return res.status(404).json({
+                    message: "cannot find medication!",
+                });
+            } else if (!medication.user.equals(req.user)) {
+                return res.status(404).json({
+                    message: "user not authorized to delete this medication!",
+                });
             }
         }
-        if (notFound)
-            return res.status(404).json({
-                message: "cannot find medication!",
-            });
-        user.save((err) => {
-            if (err)
-                return res.status(500).json({
-                    message: "cannot delete medication",
-                });
-            return res.status(200).json(med);
+    );
+
+    try {
+        let dosagesToRemove = await Dosage.find({
+            _id: {
+                $in: medicationToRemove.dosages.concat(
+                    medicationToRemove.inactiveDosages
+                ),
+            },
         });
-    });
+        //for each dosage, delete and deschedule all of the occurrences
+        dosagesToRemove.forEach(async (dosage) => {
+            let occurrences = await Occurrence.find({
+                _id: { $in: dosage.occurrences },
+            });
+            occurrences.forEach((occurrence) => {
+                if (!occurrence.isComplete) {
+                    let key = occurrence._id.toString();
+                    if (key in schedule.scheduledJobs) {
+                        const job = schedule.scheduledJobs[key];
+                        if (job != null && job != undefined) {
+                            job.cancel();
+                        }
+                    }
+                }
+            });
+            await Occurrence.deleteMany({ _id: { $in: dosage.occurrences } });
+        });
+
+        Dosage.deleteMany({
+            _id: {
+                $in: medicationToRemove.dosages.concat(
+                    medicationToRemove.inactiveDosages
+                ),
+            },
+        });
+        Medication.deleteOne({ _id: medicationToRemove._id });
+        //find the user and delete the medication reference
+        let user = await User.findById(medicationToRemove.user);
+        let index = user.medications.indexOf(medicationToRemove._id);
+        if (index != -1) {
+            user.medications.splice(index, 1);
+        }
+        user.save();
+        return res
+            .status(200)
+            .json({ message: "Successfully deleted medication!" });
+    } catch (err) {
+        return res.status(404).json({ message: "Cannot delete medication!" });
+    }
 };
 
 export const fuzzySearchWithString = (req, res) => {
@@ -357,80 +391,55 @@ export const getOccurrences = async (req, res) => {
 };
 
 /*function to post when a medication is taken */
-export const addOccurrence = (req, res) => {
+export const addOccurrence = async (req, res) => {
     if (req.user == null) {
         return res.status(400).json({
             message: "token error: cannot find user from token!",
         });
     }
-    let userId = req.user;
-    let occurrence = req.body.occurrence;
-    let medicationId = req.body.medicationId;
-    let dosageId = req.body.dosageId;
-    if (occurrence == null || medicationId == null || dosageId == null) {
+    let occurrence = req.body;
+    if (occurrence == undefined) {
         return res.status(400).json({ message: "missing occurrence data!" });
     }
 
-    User.findOne({ _id: userId }, (err, user) => {
-        if (err) {
-            return res.status(404).json({ message: "cannot find user!" });
-        } else {
-            //find the indexes of the med, dosage, and occurrence
-            let medIndex = user.medications.findIndex(
-                (med) => med._id == medicationId
-            );
-            if (medIndex == -1) {
+    //check that the occurrence belongs to the user posting it
+    let dosage = await Dosage.findById(occurrence.dosage);
+    let medication = await Dosage.findById(dosage.medication);
+    if (!medication.user.equals(req.user)) {
+        return res.status(401).json({
+            message: "You are not authorized to edit this occurrence",
+        });
+    }
+
+    //update occurrence
+    Occurrence.findOneAndUpdate(
+        {
+            query: { _id: occurrence._id },
+            update: {
+                isTaken: occurrence.isTaken,
+                isComplete: true,
+                timeTaken: occurrence.timeTaken,
+            },
+        },
+        (err, occurrenceToUpdate) => {
+            if (err) {
                 return res
                     .status(404)
-                    .json({ message: "cannot find medication!" });
-            }
-            let dosageIndex = user.medications[medIndex].dosages.findIndex(
-                (dosage) => dosage._id == dosageId
-            );
-            if (dosageIndex == -1) {
-                return res.status(404).json({ message: "cannot find dosage!" });
-            }
-            let occurrenceIndex = user.medications[medIndex].dosages[
-                dosageIndex
-            ].occurrences.findIndex(
-                (occurrenceU) => occurrenceU._id == occurrence._id
-            );
-            if (occurrenceIndex == -1) {
-                return res
-                    .status(404)
-                    .json({ message: "cannot find occurrence!" });
-            }
-            user.medications[medIndex].dosages[dosageIndex].occurrences[
-                occurrenceIndex
-            ].isTaken = occurrence.isTaken;
-            user.medications[medIndex].dosages[dosageIndex].occurrences[
-                occurrenceIndex
-            ].isTaken = occurrence.timeTaken;
-            user.medications[medIndex].dosages[dosageIndex].occurrences[
-                occurrenceIndex
-            ].isTaken = true;
-            let occurrenceToUpdate =
-                user.medications[medIndex].dosages[dosageIndex].occurrences[
-                    occurrenceIndex
-                ];
-            user.save((err) => {
-                if (err)
-                    return res.status(500).json({
-                        message: "cannot save occurrence!",
-                    });
-            });
-            //CANCEL NOTIFICATION
-            const key = occurrenceToUpdate._id.toString();
-            //if job exists, then cancel it!
-            if (key in schedule.scheduledJobs) {
-                const job = schedule.scheduledJobs[key];
-                if (job != null && job != undefined) {
-                    job.cancel();
+                    .json({ message: "cannot update occurrence!" });
+            } else {
+                //CANCEL NOTIFICATION
+                const key = occurrenceToUpdate._id.toString();
+                //if job exists, then cancel it!
+                if (key in schedule.scheduledJobs) {
+                    const job = schedule.scheduledJobs[key];
+                    if (job != undefined) {
+                        job.cancel();
+                    }
                 }
+                return res.status(200).json(occurrenceToUpdate);
             }
-            return res.status(200).json(occurrenceToUpdate);
         }
-    });
+    );
 };
 
 /**
@@ -496,7 +505,11 @@ const getWeeklyOccurrences = (user) => {
     });
     //sort each day by date
     scheduledDays.forEach((day) => {
-        day.sort((a, b) => b.occurrence.date - a.occurrence.date);
+        day.sort(
+            (a, b) =>
+                a.occurrence.scheduledDate.getTime() -
+                b.occurrence.scheduledDate.getTime()
+        );
     });
     return scheduledDays;
 };
