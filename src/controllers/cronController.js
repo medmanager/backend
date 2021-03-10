@@ -41,11 +41,21 @@ export const scheduleMedication = async (medication) => {
             });
         });
     });
+    await newMedication
+        .populate({
+            path: "dosages",
+            model: "Dosage",
+        })
+        .execPopulate();
+    console.log(medication);
     medication.dosages.forEach(async (dosage) => {
+        console.log(dosage);
         await dosage.populate("occurrences").execPopulate();
+        console.log(dosage);
         dosage.occurrences.forEach((occurrence) => {
             //only schedule a job for the dose if reminders are toggled
             if (dosage.sendReminder) {
+                console.log(occurrence.scheduledDate.toString());
                 schedule.scheduleJob(
                     occurrence._id.toString(),
                     occurrence.scheduledDate,
@@ -53,6 +63,7 @@ export const scheduleMedication = async (medication) => {
                         sendNotification();
                     }
                 );
+                console.log(schedule);
             }
         });
     });
@@ -101,6 +112,7 @@ export const scheduleWeeklyOccurrences = async (userId) => {
             });
         });
     });
+
     //SAVING USER WILL AUTO GENERATE OCCURRENCE ID'S FOR US TO USE
     user.medications.forEach((med) => {
         med.dosages.forEach((dosage) => {
@@ -176,7 +188,7 @@ const removeFutureOccurrences = async (user) => {
     });
 };
 
-export const sendNotification = () => {
+const sendNotification = () => {
     console.log("take your medication");
 };
 
@@ -251,6 +263,7 @@ const getScheduledMedicationDays = (med) => {
             med.dosages.forEach((dosage) => {
                 //get amount of millis to add to current dateToTake
                 let millisToAdd = dosage.reminderTime.getHours() * 3600 * 1000;
+                millisToAdd += dosage.reminderTime.getMinutes() * 1000 * 60;
                 let dateWTime = new Date(dateToTake.getTime() + millisToAdd);
                 datesWTime.push({ date: dateWTime, dosageId: dosage._id });
             });
@@ -306,6 +319,8 @@ const getScheduledMedicationDays = (med) => {
                         //get amount of millis to add to current dateToTake
                         let millisToAdd =
                             dosage.reminderTime.getHours() * 3600 * 1000;
+                        millisToAdd +=
+                            dosage.reminderTime.getMinutes() * 1000 * 60;
                         let dateWTime = new Date(
                             dateToTake.getTime() + millisToAdd
                         );
@@ -389,6 +404,7 @@ const getScheduledDays = (user) => {
                     //get amount of millis to add to current dateToTake
                     let millisToAdd =
                         dosage.reminderTime.getHours() * 3600 * 1000;
+                    millisToAdd += dosage.reminderTime.getMinutes() * 1000 * 60;
                     let dateWTime = new Date(
                         dateToTake.getTime() + millisToAdd
                     );
@@ -446,6 +462,8 @@ const getScheduledDays = (user) => {
                             //get amount of millis to add to current dateToTake
                             let millisToAdd =
                                 dosage.reminderTime.getHours() * 3600 * 1000;
+                            millisToAdd +=
+                                dosage.reminderTime.getMinutes() * 1000 * 60;
                             let dateWTime = new Date(
                                 dateToTake.getTime() + millisToAdd
                             );
