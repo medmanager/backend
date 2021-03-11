@@ -95,7 +95,6 @@ export const getMedications = (req, res) => {
                     return res.status(404).send({
                         message: "cannot find medications!",
                     });
-
                 return res.status(200).json(medications);
             });
     });
