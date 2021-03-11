@@ -84,6 +84,10 @@ export const getMedications = (req, res) => {
             return res.send(err);
         }
 
+        if (!user) {
+            return res.status(404).json({ message: "User not found." });
+        }
+
         Medication.find({ _id: { $in: user.medications } })
             .populate("dosages")
             .exec((err, medications) => {
@@ -106,6 +110,10 @@ export const getMedicationFromID = async (req, res) => {
     let medication;
     try {
         medication = await Medication.findById(medId);
+
+        if (!medication) {
+            return res.status(404).json({ message: "Medication not found" });
+        }
 
         //ensure that the medication id matches the same user that sent the request
         if (!medication.user.equals(req.user))
@@ -223,10 +231,11 @@ export const deleteMedicationFromID = async (req, res) => {
                 return res.status(404).json({
                     message: "cannot find medication!",
                 });
-            } else if (
-                medication == undefined ||
-                !medication.user.equals(req.user)
-            ) {
+            } else if (!medication) {
+                return res
+                    .status(404)
+                    .json({ message: "Medication not found" });
+            } else if (!medication.user.equals(req.user)) {
                 return res.status(404).json({
                     message: "user not authorized to delete this medication!",
                 });
@@ -340,6 +349,11 @@ export const getDosages = (req, res) => {
         if (err) {
             return res.status(404).json({ message: "cannot find user!" });
         }
+
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
         let dosages = [];
         user.medications.forEach((med) => {
             med.dosages.forEach((dosage) => {
@@ -437,6 +451,10 @@ export const addOccurrence = async (req, res) => {
                 return res
                     .status(404)
                     .json({ message: "cannot update occurrence!" });
+            } else if (!occurrenceToUpdate) {
+                return res
+                    .status(404)
+                    .json({ message: "Occurrence not found" });
             } else {
                 //CANCEL NOTIFICATION
                 const key = occurrenceToUpdate._id.toString();
