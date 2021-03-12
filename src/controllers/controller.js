@@ -295,7 +295,7 @@ export const deleteMedicationFromID = async (req, res) => {
 
 export const fuzzySearchWithString = (req, res) => {
     let searchStr = req.params.searchStr;
-    console.log("REST/spellingsuggestions.json?name=" + searchStr);
+    //console.log("REST/spellingsuggestions.json?name=" + searchStr);
 
     const req2 = https.request(
         {

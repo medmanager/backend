@@ -57,7 +57,7 @@ export const scheduleMedication = async (medication) => {
                     occurrence._id.toString(),
                     occurrence.scheduledDate,
                     function () {
-                        sendNotification();
+                        sendNotification(occurrence._id);
                     }
                 );
             }
@@ -134,7 +134,7 @@ export const scheduleWeeklyOccurrences = async (userId) => {
                         occurrence._id.toString(),
                         occurrence.scheduledDate,
                         function () {
-                            sendNotification();
+                            sendNotification(occurrence._id);
                         }
                     );
                 }
@@ -192,8 +192,19 @@ const removeFutureOccurrences = async (user) => {
     }
 };
 
-const sendNotification = () => {
-    console.log("take your medication");
+const sendNotification = async (occurrenceId) => {
+    let occurrence = await Occurrence.findById(occurrenceId);
+    let dosage = await Dosage.findById(occurrence.dosage);
+    let medication = await Medication.findById(dosage.medication);
+    let str =
+        "Take " +
+        dosage.dose +
+        " " +
+        medication.amountUnit +
+        " of " +
+        medication.name +
+        " now!";
+    console.log(str);
 };
 
 /**
