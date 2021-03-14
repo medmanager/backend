@@ -31,6 +31,14 @@ export const UserSchema = new Schema({
             ref: "Medication",
         },
     ],
+    deviceInfo: {
+        token: {
+            type: String,
+        },
+        os: {
+            type: String,
+        },
+    },
 });
 
 UserSchema.methods.comparePassword = (password, hashPassword) => {

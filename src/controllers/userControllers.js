@@ -64,6 +64,10 @@ export const login = (req, res) => {
     );
 };
 
+// export const logout = (req, res) => {
+//     User.findOneAndUpdate({ _id: req.user }, );
+// };
+
 //verifies if the given token (as a param) is a valid token
 export const verify = (req, res) => {
     let token = req.params.token;

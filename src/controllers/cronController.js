@@ -1,5 +1,7 @@
+import apn from "apn";
 import mongoose from "mongoose";
 import schedule from "node-schedule";
+import path from "path";
 import { DosageSchema, OccurrenceSchema } from "../models/Dosage";
 import { MedicationSchema } from "../models/Medication";
 import { UserSchema } from "../models/User";
@@ -192,19 +194,70 @@ const removeFutureOccurrences = async (user) => {
     }
 };
 
+const Platform = {
+    iOS: "ios",
+    Android: "android",
+};
+
 const sendNotification = async (occurrenceId) => {
     let occurrence = await Occurrence.findById(occurrenceId);
     let dosage = await Dosage.findById(occurrence.dosage);
     let medication = await Medication.findById(dosage.medication);
-    let str =
-        "Take " +
-        dosage.dose +
-        " " +
-        medication.amountUnit +
-        " of " +
-        medication.name +
-        " now!";
-    console.log(str);
+    let user = await User.findById(medication.user);
+    console.log(user.deviceInfo);
+    if (user.deviceInfo.os === Platform.iOS) {
+        //ios logic
+        const APPLE_TEAM_ID = "984MGH966E"; // obtained from Apple developer account
+        const APPLE_KEY_ID = "NZBL8SR7RJ"; // obtained from Apple developer account
+        const options = {
+            token: {
+                key: path.resolve(
+                    __dirname + "../../../MedManager_apns_key.p8" // obtained from Apple developer account
+                ),
+                keyId: APPLE_KEY_ID,
+                teamId: APPLE_TEAM_ID,
+            },
+            production: false,
+        };
+
+        const apnProvider = new apn.Provider(options);
+        const notification = new apn.Notification();
+
+        notification.expiry = Math.floor(Date.now() / 1000) + 3600; // Expires 1 hour from now.
+        notification.badge = 1;
+        notification.sound = "ping.aiff";
+        notification.alert =
+            "It's time to take your medications. Open the MedManager app to see more.";
+        notification.payload = { medId: medication.id, dosageId: dosage.id };
+        notification.topic = "org.reactjs.native.example.MedManager";
+
+        const deviceToken = user.deviceInfo.token;
+        const deviceTokens = [deviceToken];
+        const response = await apnProvider.send(notification, deviceTokens);
+        if (response.sent) {
+            console.log("Notification successfully sent");
+            console.log(medication);
+        } else if (response.failed) {
+            console.log("Notification failed to send");
+            for (const error of response.failed) {
+                console.error(error);
+            }
+            console.log(options);
+            console.log(medication);
+        }
+    } else {
+        //android logic
+    }
+    //debugging
+    // let str =
+    //     "Take " +
+    //     dosage.dose +
+    //     " " +
+    //     medication.amountUnit +
+    //     " of " +
+    //     medication.name +
+    //     " now!";
+    // console.log(str);
 };
 
 /**

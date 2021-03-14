@@ -470,6 +470,26 @@ export const addOccurrence = async (req, res) => {
     );
 };
 
+export const registerDeviceKey = async (req, res) => {
+    if (req.user == null) {
+        return res.status(400).json({
+            message: "token error: cannot find user from token!",
+        });
+    }
+    let token = req.body.token;
+    let os = req.body.os;
+    if (token == undefined || os == undefined) {
+        return res
+            .status(400)
+            .json({ message: "missing token/deviceType data!" });
+    }
+    await User.findOneAndUpdate(
+        { _id: req.user },
+        { deviceInfo: { token, os } }
+    );
+    return res.status(200).json({ ok: true });
+};
+
 /**
  * Helper function for getOccurrences that uses the occurrences already stored
  * in the database to send. Formats them into an array of days containing an array of
