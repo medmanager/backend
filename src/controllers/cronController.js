@@ -199,6 +199,13 @@ const Platform = {
     Android: "android",
 };
 
+/**
+ * Relevant documentation:
+ * - https://docs.expo.io/push-notifications/sending-notifications-custom/ - For information on sending push notifications in general
+ * - https://github.com/node-apn/node-apn - For sending apple push notifications
+ * - https://firebase.google.com/docs/cloud-messaging/send-message - For sending android push notifications
+ * @param {String} occurrenceId Occurrence id
+ */
 const sendNotification = async (occurrenceId) => {
     let occurrence = await Occurrence.findById(occurrenceId);
     let dosage = await Dosage.findById(occurrence.dosage);
