@@ -255,24 +255,78 @@ export const deleteMedicationFromID = async (req, res) => {
                 ),
             },
         });
-        //for each dosage, delete and deschedule all of the occurrences
-        dosagesToRemove.forEach(async (dosage) => {
+
+        //for each dosage, delete occurrences and create occurrenceGroup array
+        let occurrencesToRemove = [];
+        let occurrenceGroupsToRemove = [];
+        for (let dosage of dosagesToRemove) {
             let occurrences = await Occurrence.find({
                 _id: { $in: dosage.occurrences },
             });
-            occurrences.forEach((occurrence) => {
-                if (!occurrence.isComplete) {
-                    let key = occurrence._id.toString();
-                    if (key in schedule.scheduledJobs) {
-                        const job = schedule.scheduledJobs[key];
-                        if (job != null && job != undefined) {
-                            job.cancel();
-                        }
+            for (let occurrence of occurrences) {
+                if (occurrenceGroupsToRemove.indexOf(occurrence.group) == -1) {
+                    occurrenceGroupsToRemove.push(occurrence.group);
+                }
+            }
+            occurrencesToRemove.concat(occurrences);
+        }
+
+        for (let group of occurrenceGroupsToRemove) {
+            let shouldCancel = false;
+            if (group.occurrences.length == 1) {
+                shouldCancel = true;
+            } else {
+                //if there are multiple occurrences,
+                //and one of the other occurrences has a dosage that
+                //has sendReminders on, then do not delete the occurrenceGroup
+                let occurrences = await Occurrence.find({
+                    _id: { $in: group.occurrences },
+                });
+                let dosageIds = [];
+                occurrences.forEach((occ) => {
+                    dosageIds.push(occ.dosage);
+                });
+                let dosages = await Dosage.find({
+                    _id: { $in: dosageIds },
+                });
+                shouldCancel = true;
+                for (let dosage of dosages) {
+                    if (
+                        occurrencesToRemove.indexOf(
+                            (occ) => occ.dosage == dosage._id
+                        ) == -1 &&
+                        dosage.sendReminder == true
+                    ) {
+                        shouldCancel = false;
+                        break;
                     }
                 }
-            });
-            await Occurrence.deleteMany({ _id: { $in: dosage.occurrences } });
-        });
+                if (!shouldCancel) {
+                    let indexOfOccToRemove = group.occurrences.indexOf(
+                        (occ) => occ == occurrenceToUpdate._id
+                    );
+                    if (indexOfOccToRemove != -1) {
+                        group.splice(indexOfOccToRemove, 1);
+                    }
+                    group.save();
+                }
+            }
+            if (shouldCancel) {
+                const key = group._id.toString();
+                //if job exists, then cancel it!
+                if (key in schedule.scheduledJobs) {
+                    const job = schedule.scheduledJobs[key];
+                    if (job != undefined) {
+                        job.cancel();
+                    }
+                }
+                OccurrenceGroup.deleteOne({
+                    _id: group._id,
+                });
+            }
+        }
+
+        await Occurrence.deleteMany({ _id: { $in: occurrencesToRemove } });
 
         await Dosage.deleteMany({
             _id: {
@@ -505,7 +559,7 @@ export const addOccurrence = async (req, res) => {
                         }
                     }
                     if (shouldCancel) {
-                        const key = occurrenceGroup[0]._id.toString();
+                        const key = occurrenceGroup._id.toString();
                         //if job exists, then cancel it!
                         if (key in schedule.scheduledJobs) {
                             const job = schedule.scheduledJobs[key];
@@ -514,7 +568,7 @@ export const addOccurrence = async (req, res) => {
                             }
                         }
                         OccurrenceGroup.deleteOne({
-                            _id: occurrenceGroup[0]._id,
+                            _id: occurrenceGroup._id,
                         });
                     }
                 }

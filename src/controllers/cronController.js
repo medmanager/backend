@@ -87,6 +87,10 @@ export const scheduleMedication = async (medication, userId) => {
                 occurrenceGroup = occurrenceGroups[indexOfOccGroup];
             } else {
                 occurrenceGroup = new OccurrenceGroup();
+                //edge case: there are not any occurrenceGroups for existing medications
+                //at this time because the occurrences belong to dosages that have sendReminder
+                //off. We need to iterate over occurrences that happen at this time and include
+                //them in the occurrenceGroup
             }
             let assembleGroup = [];
             assembleGroup.push(day[i]);
@@ -727,13 +731,16 @@ const sortOccurrencesByTime = (user) => {
     for (let i = 0; i < 7; i++) {
         sortedOccurrences.push([]);
     }
+    let now = new Date();
     user.medications.forEach((med) => {
         med.dosages.forEach((dosage) => {
             dosage.occurrences.forEach((occurrence) => {
-                //push occurrences onto correct day array inside sortedOccurrences
-                sortedOccurrences[occurrence.scheduledDate.getDay()].push(
-                    occurrence
-                );
+                if (occurrence.getTime() > now.getTime()) {
+                    //push occurrences onto correct day array inside sortedOccurrences
+                    sortedOccurrences[occurrence.scheduledDate.getDay()].push(
+                        occurrence
+                    );
+                }
             });
         });
     });
@@ -760,13 +767,15 @@ const sortOccurrencesByTimeMed = (medication) => {
     for (let i = 0; i < 7; i++) {
         sortedOccurrences.push([]);
     }
-
+    let now = new Date();
     medication.dosages.forEach((dosage) => {
         dosage.occurrences.forEach((occurrence) => {
-            //push occurrences onto correct day array inside sortedOccurrences
-            sortedOccurrences[occurrence.scheduledDate.getDay()].push(
-                occurrence
-            );
+            if (occurrence.getTime() > now.getTime()) {
+                //push occurrences onto correct day array inside sortedOccurrences
+                sortedOccurrences[occurrence.scheduledDate.getDay()].push(
+                    occurrence
+                );
+            }
         });
     });
 
