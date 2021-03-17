@@ -1,7 +1,8 @@
 import https from "https";
 import mongoose from "mongoose";
 import schedule from "node-schedule";
-import { DosageSchema, OccurrenceSchema } from "../models/Dosage";
+import { DosageSchema } from "../models/Dosage";
+import { OccurrenceSchema, OccurrenceGroupSchema } from "../models/Occurrence";
 import { MedicationSchema } from "../models/Medication";
 import { UserSchema } from "../models/User";
 import { scheduleMedication } from "./cronController";
@@ -10,6 +11,10 @@ const User = mongoose.model("User", UserSchema);
 const Medication = mongoose.model("Medication", MedicationSchema);
 const Dosage = mongoose.model("Dosage", DosageSchema);
 const Occurrence = mongoose.model("Occurrence", OccurrenceSchema);
+const OccurrenceGroup = mongoose.model(
+    "OccurrenceGroup",
+    OccurrenceGroupSchema
+);
 
 // add a new medication
 export const addNewMedication = async (req, res) => {
@@ -61,7 +66,7 @@ export const addNewMedication = async (req, res) => {
         .execPopulate();
 
     try {
-        await scheduleMedication(newMedication);
+        await scheduleMedication(newMedication, user._id);
     } catch (err) {
         console.error(err);
         return res.status(500).json({
@@ -445,7 +450,7 @@ export const addOccurrence = async (req, res) => {
             timeTaken: occurrenceP.timeTaken,
         },
         { new: true },
-        (err, occurrenceToUpdate) => {
+        async (err, occurrenceToUpdate) => {
             if (err) {
                 return res
                     .status(404)
@@ -456,12 +461,61 @@ export const addOccurrence = async (req, res) => {
                     .json({ message: "Occurrence not found" });
             } else {
                 //CANCEL NOTIFICATION
-                const key = occurrenceToUpdate._id.toString();
-                //if job exists, then cancel it!
-                if (key in schedule.scheduledJobs) {
-                    const job = schedule.scheduledJobs[key];
-                    if (job != undefined) {
-                        job.cancel();
+                let occurrenceGroup = await OccurrenceGroup.find({
+                    _id: occurrenceToUpdate.group,
+                });
+                //if occurrenceGroup exists then decide to unschedule/delete
+                if (occurrenceGroup.length != 0 && occurrenceGroup[0] != null) {
+                    occurrenceGroup = occurrenceGroup[0];
+                    let shouldCancel = false;
+                    if (occurrenceGroup.occurrences.length == 1) {
+                        shouldCancel = true;
+                    } else {
+                        //if there are multiple occurrences,
+                        //and one of the other occurrences has a dosage that
+                        //has sendReminders on, then do not delete the occurrenceGroup
+                        let occurrences = await Occurrence.find({
+                            _id: { $in: occurrenceGroup.occurrences },
+                        });
+                        let dosageIds = [];
+                        occurrences.forEach((occ) => {
+                            dosageIds.push(occ.dosage);
+                        });
+                        let dosages = await Dosage.find({
+                            _id: { $in: dosageIds },
+                        });
+                        shouldCancel = true;
+                        for (let dosage of dosages) {
+                            if (
+                                dosage._id != occurrenceToUpdate.dosage &&
+                                dosage.sendReminder == true
+                            ) {
+                                shouldCancel = false;
+                                break;
+                            }
+                        }
+                        if (!shouldCancel) {
+                            let indexOfOccToRemove = occurrenceGroup.occurrences.indexOf(
+                                (occ) => occ == occurrenceToUpdate._id
+                            );
+                            if (indexOfOccToRemove != -1) {
+                                occurrenceGroup.splice(indexOfOccToRemove, 1);
+                            }
+                            occurrenceGroup.save();
+                        }
+                    }
+                    if (shouldCancel) {
+                        const key = occurrenceGroup[0]._id.toString();
+                        //if job exists, then cancel it!
+                        if (key in schedule.scheduledJobs) {
+                            const job = schedule.scheduledJobs[key];
+                            if (job != undefined) {
+                                job.cancel();
+                            }
+                        }
+                        OccurrenceGroup.deleteOne({
+                            _id: occurrenceGroup[0]._id,
+                        });
                     }
                 }
                 return res.status(200).json(occurrenceToUpdate);

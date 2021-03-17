@@ -2,7 +2,8 @@ import apn from "apn";
 import mongoose from "mongoose";
 import schedule from "node-schedule";
 import path from "path";
-import { DosageSchema, OccurrenceSchema } from "../models/Dosage";
+import { DosageSchema } from "../models/Dosage";
+import { OccurrenceSchema, OccurrenceGroupSchema } from "../models/Occurrence";
 import { MedicationSchema } from "../models/Medication";
 import { UserSchema } from "../models/User";
 
@@ -10,13 +11,17 @@ const User = mongoose.model("User", UserSchema);
 const Medication = mongoose.model("Medication", MedicationSchema);
 const Dosage = mongoose.model("Dosage", DosageSchema);
 const Occurrence = mongoose.model("Occurrence", OccurrenceSchema);
+const OccurrenceGroup = mongoose.model(
+    "OccurrenceGroup",
+    OccurrenceGroupSchema
+);
 
 /**
  * When a new medication is added, schedule new jobs for the week
  * and store array of occurrences
  * ASSUME OTHER MEDS HAVE ALREADY BEEN SCHEDULED
  */
-export const scheduleMedication = async (medication) => {
+export const scheduleMedication = async (medication, userId) => {
     let scheduledDays = getScheduledMedicationDays(medication);
     //DO NOT USE .forEach because it won't loop asynchronously
     for (let day of scheduledDays) {
@@ -51,20 +56,94 @@ export const scheduleMedication = async (medication) => {
             populate: { path: "occurrences", model: "Occurrence" },
         })
         .execPopulate();
-    medication.dosages.forEach((dosage) => {
-        dosage.occurrences.forEach((occurrence) => {
-            //only schedule a job for the dose if reminders are toggled
-            if (dosage.sendReminder) {
+    //find all occurrenceGroups that belong to the user
+    let occurrenceGroups = OccurrenceGroup.find({ user: userId });
+    let sortedOccurrences = sortOccurrencesByTimeMed(medication);
+    let now = new Date();
+    for (let dayIndex = 0; dayIndex < sortedOccurrences.length; dayIndex++) {
+        //skip over previous days of the week
+        if (dayIndex < now.getDay()) {
+            continue;
+        }
+        let day = sortedOccurrences[dayIndex];
+        //iterate over each day and group together occurrences that happen in the same minute
+        for (let i = 0; i < day.length; i++) {
+            //if scheduledDate has already passed don't do anything
+            if (day[i].scheduledDate.getTime() < now.getTime()) continue;
+
+            //CHECK IF THERE IS AN EXISTING OCCURRENCE GROUP AT THIS TIME
+            let indexOfOccGroup = occurrenceGroups.indexOf(
+                (occGroup) =>
+                    occGroup.scheduledDate.getDay() ==
+                        day[i].scheduledDate.getDay() &&
+                    occGroup.scheduledDate.getHour() ==
+                        day[i].scheduledDate.getHour() &&
+                    occGroup.scheduledDate.getMinute() ==
+                        day[i].scheduledDate.getMinute()
+            );
+            //if there is an existing group, merge new occurrences into group
+            let occurrenceGroup;
+            if (indexOfOccGroup != -1) {
+                occurrenceGroup = occurrenceGroups[indexOfOccGroup];
+            } else {
+                occurrenceGroup = new OccurrenceGroup();
+            }
+            let assembleGroup = [];
+            assembleGroup.push(day[i]);
+            await Occurrence.findOneAndUpdate(
+                { _id: day[i]._id },
+                { group: occurrenceGroup._id }
+            );
+            let occurrenceTime =
+                day[i].scheduledDate.getHours() +
+                day[i].scheduledDate.getMinutes();
+            for (let j = i + 1; j < day.length; j++) {
+                let nOccurrenceTime =
+                    day[i].scheduledDate.getHours() +
+                    day[i].scheduledDate.getMinutes();
+                if (occurrenceTime == nOccurrenceTime) {
+                    assembleGroup.push(day[j]);
+                    await Occurrence.findOneAndUpdate(
+                        { _id: day[j]._id },
+                        { group: occurrenceGroup._id }
+                    );
+                }
+            }
+            occurrenceGroup.occurrences = assembleGroup;
+            //set scheduleDate equal to the first occurrence in assembleGroup
+            //assembleGroup should always have at least one occurrence in it
+            occurrenceGroup.scheduledDate = assembleGroup[0].scheduledDate();
+            //check that at least one of the dosages scheduled has reminders on
+            //if none do, then a job shouldn't be scheduled
+            let dosageIds = [];
+            assembleGroup.forEach((occ) => dosageIds.push(occ.dosage));
+            let dosages;
+            try {
+                //save occurrence group and find dosages, if error just return
+                await occurrenceGroup.save();
+                dosages = await Dosage.find({ _id: { $in: dosageIds } });
+            } catch (err) {
+                console.log(err);
+                return;
+            }
+            let sendReminder = false;
+            dosages.forEach((dosage) => {
+                if (dosage.sendReminder) {
+                    sendReminder = true;
+                }
+            });
+            //if reminders are on, schedule job
+            if (sendReminder) {
                 schedule.scheduleJob(
-                    occurrence._id.toString(),
-                    occurrence.scheduledDate,
+                    occurrenceGroup._id.toString(),
+                    occurrenceGroup.scheduledDate,
                     function () {
-                        sendNotification(occurrence._id);
+                        sendNotification(occurrenceGroup._id);
                     }
                 );
             }
-        });
-    });
+        }
+    }
 };
 
 /**
@@ -126,23 +205,75 @@ export const scheduleWeeklyOccurrences = async (userId) => {
             },
         })
         .execPopulate();
-    //SAVING USER WILL AUTO GENERATE OCCURRENCE ID'S FOR US TO USE
-    user.medications.forEach((med) => {
-        med.dosages.forEach((dosage) => {
-            dosage.occurrences.forEach((occurrence) => {
-                //only schedule a job for the dose if reminders are toggled
-                if (dosage.sendReminder) {
-                    schedule.scheduleJob(
-                        occurrence._id.toString(),
-                        occurrence.scheduledDate,
-                        function () {
-                            sendNotification(occurrence._id);
-                        }
+    let sortedOccurrences = sortOccurrencesByTime(user);
+    let now = new Date();
+    for (let dayIndex = 0; dayIndex < sortedOccurrences.length; dayIndex++) {
+        //skip over previous days of the week
+        if (dayIndex < now.getDay()) {
+            continue;
+        }
+        let day = sortedOccurrences[dayIndex];
+        //iterate over each day and group together occurrences that happen in the same minute
+        for (let i = 0; i < day.length; i++) {
+            //if scheduledDate has already passed don't do anything
+            if (day[i].scheduledDate.getTime() < now.getTime()) continue;
+            let occurrenceGroup = new OccurrenceGroup();
+            let assembleGroup = [];
+            assembleGroup.push(day[i]);
+            await Occurrence.findOneAndUpdate(
+                { _id: day[i]._id },
+                { group: occurrenceGroup._id }
+            );
+            let occurrenceTime =
+                day[i].scheduledDate.getHours() +
+                day[i].scheduledDate.getMinutes();
+            for (let j = i + 1; j < day.length; j++) {
+                let nOccurrenceTime =
+                    day[i].scheduledDate.getHours() +
+                    day[i].scheduledDate.getMinutes();
+                if (occurrenceTime == nOccurrenceTime) {
+                    assembleGroup.push(day[j]);
+                    await Occurrence.findOneAndUpdate(
+                        { _id: day[j]._id },
+                        { group: occurrenceGroup._id }
                     );
                 }
+            }
+            occurrenceGroup.occurrences = assembleGroup;
+            //set scheduleDate equal to the first occurrence in assembleGroup
+            //assembleGroup should always have at least one occurrence in it
+            occurrenceGroup.scheduledDate = assembleGroup[0].scheduledDate();
+            //check that at least one of the dosages scheduled has reminders on
+            //if none do, then a job shouldn't be scheduled
+            let dosageIds = [];
+            assembleGroup.forEach((occ) => dosageIds.push(occ.dosage));
+            let dosages;
+            try {
+                //save occurrence group and find dosages, if error just return
+                await occurrenceGroup.save();
+                dosages = await Dosage.find({ _id: { $in: dosageIds } });
+            } catch (err) {
+                console.log(err);
+                return;
+            }
+            let sendReminder = false;
+            dosages.forEach((dosage) => {
+                if (dosage.sendReminder) {
+                    sendReminder = true;
+                }
             });
-        });
-    });
+            //if reminders are on, schedule job
+            if (sendReminder) {
+                schedule.scheduleJob(
+                    occurrenceGroup._id.toString(),
+                    occurrenceGroup.scheduledDate,
+                    function () {
+                        sendNotification(occurrenceGroup._id);
+                    }
+                );
+            }
+        }
+    }
 };
 
 /**
@@ -152,6 +283,7 @@ export const scheduleWeeklyOccurrences = async (userId) => {
  * we only want to schedule each future occurrence once.
  */
 const removeFutureOccurrences = async (user) => {
+    let occurrenceGroupIds = [];
     for (let med of user.medications) {
         for (let dosage of med.dosages) {
             //first find all occurrences attached to dosage
@@ -165,14 +297,16 @@ const removeFutureOccurrences = async (user) => {
                 (occurrence) =>
                     occurrence.scheduledDate.getTime() > now.getTime()
             );
-            //obtain an array of ids from the array of occurrence objects
-            let occurrenceIds = occurrencesToRemove.map(
-                (occ) => (occ = occ._id)
-            );
+
+            for (let occ of occurrences) {
+                if (!(occ.group in occurrenceGroupIds)) {
+                    occurrenceGroupIds.push(occ.group);
+                }
+            }
             //delete all future occurrences
             let d = await Dosage.findById(dosage._id);
 
-            occurrenceIds.forEach((occId) => {
+            occurrencesToRemove.forEach((occId) => {
                 let index = d.occurrences.indexOf(occId);
                 if (index != -1) {
                     d.occurrences.splice(index, 1);
@@ -180,7 +314,7 @@ const removeFutureOccurrences = async (user) => {
             });
 
             await Occurrence.deleteMany(
-                { _id: { $in: occurrenceIds } },
+                { _id: { $in: occurrencesToRemove } },
                 (err) => {
                     if (err) {
                         console.log("cannot delete future occurrences");
@@ -192,6 +326,14 @@ const removeFutureOccurrences = async (user) => {
             await Dosage.findByIdAndUpdate(dosage._id, d);
         }
     }
+    await OccurrenceGroup.deleteMany(
+        { _id: { $in: occurrenceGroupIds } },
+        (err) => {
+            if (err) {
+                console.log("cannot delete occurrence");
+            }
+        }
+    );
 };
 
 const Platform = {
@@ -572,4 +714,69 @@ const getScheduledDays = (user) => {
     //     i++;
     // });
     return scheduledDays;
+};
+
+/**
+ * Given a populated user (with medications, dosages, and occurrences)
+ * @param user populated user
+ * @return sortedOccurrences array of seven days with occurrences on each day
+ */
+const sortOccurrencesByTime = (user) => {
+    //create weekly array starting on sunday and ending on sat
+    let sortedOccurrences = [];
+    for (let i = 0; i < 7; i++) {
+        sortedOccurrences.push([]);
+    }
+    user.medications.forEach((med) => {
+        med.dosages.forEach((dosage) => {
+            dosage.occurrences.forEach((occurrence) => {
+                //push occurrences onto correct day array inside sortedOccurrences
+                sortedOccurrences[occurrence.scheduledDate.getDay()].push(
+                    occurrence
+                );
+            });
+        });
+    });
+
+    //sort the occurrences by time
+    sortedOccurrences.forEach((day) => {
+        day.sort(
+            (a, b) =>
+                a.occurrence.scheduledDate.getTime() -
+                b.occurrence.scheduledDate.getTime()
+        );
+    });
+    return sortedOccurrences;
+};
+
+/**
+ * Given a populated medication (with dosages and occurrences)
+ * @param medication populated medication
+ * @return sortedOccurrences array of seven days with occurrences on each day
+ */
+const sortOccurrencesByTimeMed = (medication) => {
+    //create weekly array starting on sunday and ending on sat
+    let sortedOccurrences = [];
+    for (let i = 0; i < 7; i++) {
+        sortedOccurrences.push([]);
+    }
+
+    medication.dosages.forEach((dosage) => {
+        dosage.occurrences.forEach((occurrence) => {
+            //push occurrences onto correct day array inside sortedOccurrences
+            sortedOccurrences[occurrence.scheduledDate.getDay()].push(
+                occurrence
+            );
+        });
+    });
+
+    //sort the occurrences by time
+    sortedOccurrences.forEach((day) => {
+        day.sort(
+            (a, b) =>
+                a.occurrence.scheduledDate.getTime() -
+                b.occurrence.scheduledDate.getTime()
+        );
+    });
+    return sortedOccurrences;
 };

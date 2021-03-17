@@ -2,25 +2,6 @@ import mongoose from "mongoose";
 
 const Schema = mongoose.Schema;
 
-export const OccurrenceSchema = new Schema({
-    isTaken: {
-        type: Boolean,
-    },
-    isComplete: {
-        type: Boolean,
-    },
-    timeTaken: {
-        type: Date,
-    },
-    scheduledDate: {
-        type: Date,
-    },
-    dosage: {
-        type: Schema.Types.ObjectId,
-        ref: "Dosage",
-    },
-});
-
 export const DosageSchema = new Schema({
     dose: {
         type: Number,
