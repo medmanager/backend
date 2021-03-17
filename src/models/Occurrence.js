@@ -5,9 +5,7 @@ const Schema = mongoose.Schema;
 export const OccurrenceSchema = new Schema({
     isTaken: {
         type: Boolean,
-    },
-    isComplete: {
-        type: Boolean,
+        default: false,
     },
     timeTaken: {
         type: Date,

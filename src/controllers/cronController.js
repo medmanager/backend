@@ -33,7 +33,6 @@ export const scheduleMedication = async (medication, userId) => {
                     //create occurrence
                     let occurrence = {
                         isTaken: false,
-                        isComplete: false,
                         timeTaken: null,
                         scheduledDate: dose.date,
                         dosage: dose.dosageId,
@@ -57,7 +56,7 @@ export const scheduleMedication = async (medication, userId) => {
         })
         .execPopulate();
     //find all occurrenceGroups that belong to the user
-    let occurrenceGroups = OccurrenceGroup.find({ user: userId });
+    let occurrenceGroups = await OccurrenceGroup.find({ user: userId });
     let sortedOccurrences = sortOccurrencesByTimeMed(medication);
     let now = new Date();
     for (let dayIndex = 0; dayIndex < sortedOccurrences.length; dayIndex++) {
@@ -72,25 +71,23 @@ export const scheduleMedication = async (medication, userId) => {
             if (day[i].scheduledDate.getTime() < now.getTime()) continue;
 
             //CHECK IF THERE IS AN EXISTING OCCURRENCE GROUP AT THIS TIME
-            let indexOfOccGroup = occurrenceGroups.indexOf(
+            let indexOfOccGroup = occurrenceGroups.findIndex(
                 (occGroup) =>
                     occGroup.scheduledDate.getDay() ==
                         day[i].scheduledDate.getDay() &&
-                    occGroup.scheduledDate.getHour() ==
-                        day[i].scheduledDate.getHour() &&
-                    occGroup.scheduledDate.getMinute() ==
-                        day[i].scheduledDate.getMinute()
+                    occGroup.scheduledDate.getHours() ==
+                        day[i].scheduledDate.getHours() &&
+                    occGroup.scheduledDate.getMinutes() ==
+                        day[i].scheduledDate.getMinutes()
             );
             //if there is an existing group, merge new occurrences into group
             let occurrenceGroup;
+            let oldGroup = false;
             if (indexOfOccGroup != -1) {
+                oldGroup = true;
                 occurrenceGroup = occurrenceGroups[indexOfOccGroup];
             } else {
                 occurrenceGroup = new OccurrenceGroup();
-                //edge case: there are not any occurrenceGroups for existing medications
-                //at this time because the occurrences belong to dosages that have sendReminder
-                //off. We need to iterate over occurrences that happen at this time and include
-                //them in the occurrenceGroup
             }
             let assembleGroup = [];
             assembleGroup.push(day[i]);
@@ -101,43 +98,42 @@ export const scheduleMedication = async (medication, userId) => {
             let occurrenceTime =
                 day[i].scheduledDate.getHours() +
                 day[i].scheduledDate.getMinutes();
-            for (let j = i + 1; j < day.length; j++) {
+            let j = i + 1;
+            for (; j < day.length; j++) {
                 let nOccurrenceTime =
-                    day[i].scheduledDate.getHours() +
-                    day[i].scheduledDate.getMinutes();
+                    day[j].scheduledDate.getHours() +
+                    day[j].scheduledDate.getMinutes();
                 if (occurrenceTime == nOccurrenceTime) {
                     assembleGroup.push(day[j]);
                     await Occurrence.findOneAndUpdate(
                         { _id: day[j]._id },
                         { group: occurrenceGroup._id }
                     );
+                } else if (occurrenceTime < nOccurrenceTime) {
+                    break;
                 }
             }
-            occurrenceGroup.occurrences = assembleGroup;
+            i = j - 1;
+            occurrenceGroup.occurrences = occurrenceGroup.occurrences.concat(
+                assembleGroup
+            );
+            occurrenceGroup.user = userId;
             //set scheduleDate equal to the first occurrence in assembleGroup
             //assembleGroup should always have at least one occurrence in it
-            occurrenceGroup.scheduledDate = assembleGroup[0].scheduledDate();
-            //check that at least one of the dosages scheduled has reminders on
-            //if none do, then a job shouldn't be scheduled
-            let dosageIds = [];
-            assembleGroup.forEach((occ) => dosageIds.push(occ.dosage));
-            let dosages;
-            try {
-                //save occurrence group and find dosages, if error just return
+            occurrenceGroup.scheduledDate = new Date(
+                assembleGroup[0].scheduledDate.getTime()
+            );
+            //save occurrence group
+            if (oldGroup) {
+                //if we're using an existing group, just update with
+                //the new number of occurrences
+                await OccurrenceGroup.findOneAndUpdate(
+                    { _id: occurrenceGroup._id },
+                    { occurrences: occurrenceGroup.occurrences }
+                );
+            } else {
                 await occurrenceGroup.save();
-                dosages = await Dosage.find({ _id: { $in: dosageIds } });
-            } catch (err) {
-                console.log(err);
-                return;
-            }
-            let sendReminder = false;
-            dosages.forEach((dosage) => {
-                if (dosage.sendReminder) {
-                    sendReminder = true;
-                }
-            });
-            //if reminders are on, schedule job
-            if (sendReminder) {
+                //schedule job if it's a new group
                 schedule.scheduleJob(
                     occurrenceGroup._id.toString(),
                     occurrenceGroup.scheduledDate,
@@ -174,17 +170,16 @@ export const scheduleWeeklyOccurrences = async (userId) => {
         return;
     }
     let occurrences = getScheduledDays(user);
+    let now = new Date();
     for (let day of occurrences) {
         for (let med of day) {
             //we found the right med
             for (let dose of med.datesWTime) {
                 //ensure that the occurrence hasn't already passed
-                let now = new Date();
                 if (now.getTime() < dose.date.getTime()) {
                     //create occurrence
                     let occurrence = {
                         isTaken: false,
-                        isComplete: false,
                         timeTaken: null,
                         scheduledDate: dose.date,
                         dosage: dose.dosageId,
@@ -210,7 +205,6 @@ export const scheduleWeeklyOccurrences = async (userId) => {
         })
         .execPopulate();
     let sortedOccurrences = sortOccurrencesByTime(user);
-    let now = new Date();
     for (let dayIndex = 0; dayIndex < sortedOccurrences.length; dayIndex++) {
         //skip over previous days of the week
         if (dayIndex < now.getDay()) {
@@ -231,51 +225,39 @@ export const scheduleWeeklyOccurrences = async (userId) => {
             let occurrenceTime =
                 day[i].scheduledDate.getHours() +
                 day[i].scheduledDate.getMinutes();
-            for (let j = i + 1; j < day.length; j++) {
+            let j = i + 1;
+            for (; j < day.length; j++) {
                 let nOccurrenceTime =
-                    day[i].scheduledDate.getHours() +
-                    day[i].scheduledDate.getMinutes();
+                    day[j].scheduledDate.getHours() +
+                    day[j].scheduledDate.getMinutes();
                 if (occurrenceTime == nOccurrenceTime) {
                     assembleGroup.push(day[j]);
                     await Occurrence.findOneAndUpdate(
                         { _id: day[j]._id },
                         { group: occurrenceGroup._id }
                     );
+                } else if (occurrenceTime < nOccurrenceTime) {
+                    break;
                 }
             }
+            i = j - 1;
             occurrenceGroup.occurrences = assembleGroup;
+            occurrenceGroup.user = user;
             //set scheduleDate equal to the first occurrence in assembleGroup
             //assembleGroup should always have at least one occurrence in it
-            occurrenceGroup.scheduledDate = assembleGroup[0].scheduledDate();
-            //check that at least one of the dosages scheduled has reminders on
-            //if none do, then a job shouldn't be scheduled
-            let dosageIds = [];
-            assembleGroup.forEach((occ) => dosageIds.push(occ.dosage));
-            let dosages;
-            try {
-                //save occurrence group and find dosages, if error just return
-                await occurrenceGroup.save();
-                dosages = await Dosage.find({ _id: { $in: dosageIds } });
-            } catch (err) {
-                console.log(err);
-                return;
-            }
-            let sendReminder = false;
-            dosages.forEach((dosage) => {
-                if (dosage.sendReminder) {
-                    sendReminder = true;
+            occurrenceGroup.scheduledDate = new Date(
+                assembleGroup[0].scheduledDate.getTime()
+            ); //save occurrence group
+            await occurrenceGroup.save();
+
+            //schedule job
+            schedule.scheduleJob(
+                occurrenceGroup._id.toString(),
+                occurrenceGroup.scheduledDate,
+                function () {
+                    sendNotification(occurrenceGroup._id);
                 }
-            });
-            //if reminders are on, schedule job
-            if (sendReminder) {
-                schedule.scheduleJob(
-                    occurrenceGroup._id.toString(),
-                    occurrenceGroup.scheduledDate,
-                    function () {
-                        sendNotification(occurrenceGroup._id);
-                    }
-                );
-            }
+            );
         }
     }
 };
@@ -303,15 +285,15 @@ const removeFutureOccurrences = async (user) => {
             );
 
             for (let occ of occurrences) {
-                if (!(occ.group in occurrenceGroupIds)) {
+                if (occurrenceGroupIds.indexOf(occ.group) == -1) {
                     occurrenceGroupIds.push(occ.group);
                 }
             }
             //delete all future occurrences
             let d = await Dosage.findById(dosage._id);
 
-            occurrencesToRemove.forEach((occId) => {
-                let index = d.occurrences.indexOf(occId);
+            occurrencesToRemove.forEach((occ) => {
+                let index = d.occurrences.indexOf(occ._id);
                 if (index != -1) {
                     d.occurrences.splice(index, 1);
                 }
@@ -327,7 +309,9 @@ const removeFutureOccurrences = async (user) => {
                 }
             );
 
-            await Dosage.findByIdAndUpdate(dosage._id, d);
+            await Dosage.findByIdAndUpdate(dosage._id, {
+                occurrences: d.occurrences,
+            });
         }
     }
     await OccurrenceGroup.deleteMany(
@@ -352,11 +336,35 @@ const Platform = {
  * - https://firebase.google.com/docs/cloud-messaging/send-message - For sending android push notifications
  * @param {String} occurrenceId Occurrence id
  */
-const sendNotification = async (occurrenceId) => {
-    let occurrence = await Occurrence.findById(occurrenceId);
-    let dosage = await Dosage.findById(occurrence.dosage);
-    let medication = await Medication.findById(dosage.medication);
-    let user = await User.findById(medication.user);
+const sendNotification = async (occurrenceGroupId) => {
+    let occurrenceGroup = await OccurrenceGroup.findById(occurrenceGroupId);
+    await occurrenceGroup
+        .populate({
+            path: "occurrences",
+            model: "Occurrence",
+            populate: {
+                path: "dosage",
+                model: "Dosage",
+                populate: { path: "medication", model: "Medication" },
+            },
+        })
+        .execPopulate();
+    let user = await User.findById(
+        occurrenceGroup.occurrences[0].dosage.medication.user
+    );
+    //check that at least one of the occurrences belongs to a dosage that has sendReminder as true
+    let sendNotification = false;
+    for (let occurrence of occurrenceGroup.occurrences) {
+        if (occurrence.dosage.sendReminder) {
+            sendNotification = true;
+            break;
+        }
+    }
+    //if we shouldn't send notification, delete occurrenceGroup and return
+    if (!sendNotification) {
+        OccurrenceGroup.deleteOne({ _id: occurrenceGroup._id });
+        return;
+    }
     console.log(user.deviceInfo);
     if (user.deviceInfo.os === Platform.iOS) {
         //ios logic
@@ -381,7 +389,7 @@ const sendNotification = async (occurrenceId) => {
         notification.sound = "ping.aiff";
         notification.alert =
             "It's time to take your medications. Open the MedManager app to see more.";
-        notification.payload = { medId: medication.id, dosageId: dosage.id };
+        notification.payload = { group: occurrenceGroup };
         notification.topic = "org.reactjs.native.example.MedManager";
 
         const deviceToken = user.deviceInfo.token;
@@ -401,16 +409,9 @@ const sendNotification = async (occurrenceId) => {
     } else {
         //android logic
     }
-    //debugging
-    // let str =
-    //     "Take " +
-    //     dosage.dose +
-    //     " " +
-    //     medication.amountUnit +
-    //     " of " +
-    //     medication.name +
-    //     " now!";
-    // console.log(str);
+
+    //once notification has been sent, delete occurrenceGroup
+    OccurrenceGroup.deleteOne({ _id: occurrenceGroup._id });
 };
 
 /**
@@ -735,7 +736,7 @@ const sortOccurrencesByTime = (user) => {
     user.medications.forEach((med) => {
         med.dosages.forEach((dosage) => {
             dosage.occurrences.forEach((occurrence) => {
-                if (occurrence.getTime() > now.getTime()) {
+                if (occurrence.scheduledDate.getTime() > now.getTime()) {
                     //push occurrences onto correct day array inside sortedOccurrences
                     sortedOccurrences[occurrence.scheduledDate.getDay()].push(
                         occurrence
@@ -748,9 +749,7 @@ const sortOccurrencesByTime = (user) => {
     //sort the occurrences by time
     sortedOccurrences.forEach((day) => {
         day.sort(
-            (a, b) =>
-                a.occurrence.scheduledDate.getTime() -
-                b.occurrence.scheduledDate.getTime()
+            (a, b) => a.scheduledDate.getTime() - b.scheduledDate.getTime()
         );
     });
     return sortedOccurrences;
@@ -770,7 +769,7 @@ const sortOccurrencesByTimeMed = (medication) => {
     let now = new Date();
     medication.dosages.forEach((dosage) => {
         dosage.occurrences.forEach((occurrence) => {
-            if (occurrence.getTime() > now.getTime()) {
+            if (occurrence.scheduledDate.getTime() > now.getTime()) {
                 //push occurrences onto correct day array inside sortedOccurrences
                 sortedOccurrences[occurrence.scheduledDate.getDay()].push(
                     occurrence
@@ -782,9 +781,7 @@ const sortOccurrencesByTimeMed = (medication) => {
     //sort the occurrences by time
     sortedOccurrences.forEach((day) => {
         day.sort(
-            (a, b) =>
-                a.occurrence.scheduledDate.getTime() -
-                b.occurrence.scheduledDate.getTime()
+            (a, b) => a.scheduledDate.getTime() - b.scheduledDate.getTime()
         );
     });
     return sortedOccurrences;
