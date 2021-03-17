@@ -235,7 +235,11 @@ const sendNotification = async (occurrenceId) => {
         notification.sound = "ping.aiff";
         notification.alert =
             "It's time to take your medications. Open the MedManager app to see more.";
-        notification.payload = { medId: medication.id, dosageId: dosage.id };
+        notification.payload = {
+            medicationId: medication.id,
+            dosageId: dosage.id,
+            occurrenceId,
+        };
         notification.topic = "org.reactjs.native.example.MedManager";
 
         const deviceToken = user.deviceInfo.token;
@@ -243,7 +247,6 @@ const sendNotification = async (occurrenceId) => {
         const response = await apnProvider.send(notification, deviceTokens);
         if (response.sent) {
             console.log("Notification successfully sent");
-            console.log(medication);
         } else if (response.failed) {
             console.log("Notification failed to send");
             for (const error of response.failed) {

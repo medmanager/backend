@@ -334,6 +334,32 @@ export const fuzzySearchWithString = (req, res) => {
 };
 
 /**
+ * Gets a single occurrence
+ */
+export const getOccurrenceFromID = async (req, res) => {
+    const { occurrenceId } = req.params;
+    const userId = req.user;
+    if (userId == null) {
+        return res
+            .status(404)
+            .json({ message: "token invalid: cannot get user" });
+    }
+
+    let occurrence;
+    try {
+        occurrence = await Occurrence.findById(occurrenceId);
+        if (!occurrence) {
+            return res.status(404).json({ message: "Occurrence not found" });
+        }
+    } catch (err) {
+        return res.send(err);
+    }
+
+    await occurrence.populate("dosage").execPopulate();
+    return res.status(200).json(occurrence);
+};
+
+/**
  * returns an array of dosages independent of medications
  */
 export const getDosages = (req, res) => {

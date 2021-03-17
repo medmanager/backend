@@ -6,6 +6,7 @@ import {
     getDosages,
     getMedicationFromID,
     getMedications,
+    getOccurrenceFromID,
     getOccurrences,
     registerDeviceKey,
     updateMedicationFromID,
@@ -29,6 +30,11 @@ const routes = (app) => {
         .delete(loginRequired, deleteMedicationFromID);
 
     app.route("/dosage").get(loginRequired, getDosages);
+
+    app.route("/occurrence/:occurrenceId").get(
+        loginRequired,
+        getOccurrenceFromID
+    );
 
     app.route("/schedule/occurrences")
         .get(loginRequired, getOccurrences)
