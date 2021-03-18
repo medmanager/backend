@@ -1,10 +1,12 @@
 import apn from "apn";
+import firebase from 'firebase-admin';
 import mongoose from "mongoose";
 import schedule from "node-schedule";
 import path from "path";
 import { DosageSchema, OccurrenceSchema } from "../models/Dosage";
 import { MedicationSchema } from "../models/Medication";
 import { UserSchema } from "../models/User";
+import { addNewMedication } from "./controller";
 
 const User = mongoose.model("User", UserSchema);
 const Medication = mongoose.model("Medication", MedicationSchema);
@@ -256,7 +258,56 @@ const sendNotification = async (occurrenceId) => {
             console.log(medication);
         }
     } else {
-        //android logic
+        /* This is the configuration file that contains the server key and account
+        credentials that will allow us to send out firebase notifications. It will be 
+        ignored by git (for security) */
+        var serviceAccount = require('../../med-manager-3-firebase-adminsdk.json');
+
+        // initializes firebase using the account credentials and the account database URL
+        // (only initializes if this is the first notification sent out after the server starts up)
+
+        // we have to check if the firebase app is already initialized as well because 
+        // firebase does not like it when you try to initialize another app
+        if (firebase.apps.length === 0) {
+            firebase.initializeApp({
+                credential: firebase.credential.cert(serviceAccount),
+                databaseURL: 'https://med-manager-eb6c0-default-rtdb.firebaseio.com/'
+            });
+        }
+        
+        // device token in order for firebase to know where to send the notification
+        var registrationToken = user.deviceInfo.token;
+
+
+        // Notification payload that contains notification content and the id information that the front end needs
+        // to process the notification
+        var payload = {
+            notification: {
+                title: "It's medication time!",
+                body: "It's take to take your medication. Open the MedManager app to see more."
+            },
+            data: {
+                medicationId: medication.id,
+                dosageId: dosage.id,
+                occurrenceId: occurrence.id
+            }
+        };
+
+        // options for notification
+        var options = {
+            priority: 'high',
+            timeToLive: 60 * 60 * 24
+        };
+
+        // officially sends the notification and prints out either a confirmation or an error
+        firebase.messaging().sendToDevice(registrationToken, payload, options)
+        .then(function(response) {
+            console.log("sent firebase message: ", response);
+        })
+        .catch(function(error) {
+            console.log('Error sending message: ', error);
+        });
+
     }
     //debugging
     // let str =
