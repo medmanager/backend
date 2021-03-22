@@ -583,6 +583,66 @@ export const registerDeviceKey = async (req, res) => {
     return res.status(200).json({ ok: true });
 };
 
+export const getTrackingInfo = async (req, res) => {
+    if (req.user == null) {
+        return res.status(400).json({
+            message: "token error: cannot find user from token!",
+        });
+    }
+    try {
+        let user = await User.findById(req.user);
+        await user
+            .populate({
+                path: "medications",
+                model: "Medication",
+                populate: {
+                    path: "dosages",
+                    model: "Dosage",
+                    populate: { path: "occurrences", model: "Occurrence" },
+                },
+            })
+            .execPopulate();
+
+        let now = new Date();
+        //make sure occurrences are in range of the start and end date
+        let last12Hours = now.getTime() - 1000 * 3600 * 12;
+        let last30Days = now.getTime() - 1000 * 3600 * 24 * 30;
+        //array of medication objects that have an id, name, and compliance value
+        //representing the amount of occurrences taken for that med within the
+        let trackingArr = [];
+        for (let med of user.medications) {
+            let takenOccurrences = 0;
+            let totalOccurrences = 0;
+            for (let dosage of med.dosages) {
+                for (let occurrence of dosage.occurrences) {
+                    if (
+                        occurrence.scheduledDate.getTime() > last30Days &&
+                        occurrence.scheduledDate.getTime() < last12Hours
+                    ) {
+                        totalOccurrences++;
+                        if (occurrence.isTaken) takenOccurrences++;
+                    }
+                }
+            }
+            //don't want to get a divide by zero exception
+            //also it's not necessary to include medication in tracking
+            //array if there aren't any occurrences in the time frame
+            if (totalOccurrences > 0) {
+                trackingArr.push({
+                    medicationId: med._id,
+                    name: med.name,
+                    compliance: takenOccurrences / totalOccurrences,
+                });
+            }
+        }
+        res.send(200).json(trackingArr);
+    } catch (err) {
+        return res.status(404).json({
+            message: "cannot find tracking information from user!",
+        });
+    }
+};
+
 /**
  * Helper function for getOccurrences that uses the occurrences already stored
  * in the database to send. Formats them into an array of days containing an array of
