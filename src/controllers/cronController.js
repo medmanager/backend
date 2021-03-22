@@ -411,7 +411,7 @@ const sendNotification = async (occurrenceGroupId) => {
         /* This is the configuration file that contains the server key and account
         credentials that will allow us to send out firebase notifications. It will be 
         ignored by git (for security) */
-        var serviceAccount = require("../../med-manager-3-firebase-adminsdk.json");
+        let serviceAccount = require("../../med-manager-3-firebase-adminsdk.json");
 
         // initializes firebase using the account credentials and the account database URL
         // (only initializes if this is the first notification sent out after the server starts up)
@@ -427,11 +427,11 @@ const sendNotification = async (occurrenceGroupId) => {
         }
 
         // device token in order for firebase to know where to send the notification
-        var registrationToken = user.deviceInfo.token;
+        let registrationToken = user.deviceInfo.token;
 
         // Notification payload that contains notification content and the id information that the front end needs
         // to process the notification
-        var payload = {
+        let payload = {
             notification: {
                 title: "It's medication time!",
                 body:
@@ -443,7 +443,7 @@ const sendNotification = async (occurrenceGroupId) => {
         };
 
         // options for notification
-        var options = {
+        let options = {
             priority: "high",
             timeToLive: 60 * 60 * 24,
         };
@@ -461,7 +461,7 @@ const sendNotification = async (occurrenceGroupId) => {
     }
 
     //once notification has been sent, delete occurrenceGroup
-    OccurrenceGroup.deleteOne({ _id: occurrenceGroup._id });
+    //OccurrenceGroup.deleteOne({ _id: occurrenceGroup._id });
 };
 
 /**
