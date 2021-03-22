@@ -1,7 +1,8 @@
 import https from "https";
 import mongoose from "mongoose";
 import schedule from "node-schedule";
-import { DosageSchema, OccurrenceSchema } from "../models/Dosage";
+import { DosageSchema } from "../models/Dosage";
+import { OccurrenceSchema, OccurrenceGroupSchema } from "../models/Occurrence";
 import { MedicationSchema } from "../models/Medication";
 import { UserSchema } from "../models/User";
 import { scheduleMedication } from "./cronController";
@@ -10,6 +11,10 @@ const User = mongoose.model("User", UserSchema);
 const Medication = mongoose.model("Medication", MedicationSchema);
 const Dosage = mongoose.model("Dosage", DosageSchema);
 const Occurrence = mongoose.model("Occurrence", OccurrenceSchema);
+const OccurrenceGroup = mongoose.model(
+    "OccurrenceGroup",
+    OccurrenceGroupSchema
+);
 
 // add a new medication
 export const addNewMedication = async (req, res) => {
@@ -61,7 +66,7 @@ export const addNewMedication = async (req, res) => {
         .execPopulate();
 
     try {
-        await scheduleMedication(newMedication);
+        await scheduleMedication(newMedication, user._id);
     } catch (err) {
         console.error(err);
         return res.status(500).json({
@@ -250,24 +255,52 @@ export const deleteMedicationFromID = async (req, res) => {
                 ),
             },
         });
-        //for each dosage, delete and deschedule all of the occurrences
-        dosagesToRemove.forEach(async (dosage) => {
+
+        //for each dosage, delete occurrences and create occurrenceGroup array
+        let occurrencesToRemove = [];
+        let occurrenceGroupsToRemove = [];
+        for (let dosage of dosagesToRemove) {
             let occurrences = await Occurrence.find({
                 _id: { $in: dosage.occurrences },
             });
-            occurrences.forEach((occurrence) => {
-                if (!occurrence.isComplete) {
-                    let key = occurrence._id.toString();
-                    if (key in schedule.scheduledJobs) {
-                        const job = schedule.scheduledJobs[key];
-                        if (job != null && job != undefined) {
-                            job.cancel();
-                        }
+            for (let occurrence of occurrences) {
+                if (occurrenceGroupsToRemove.indexOf(occurrence.group) == -1) {
+                    occurrenceGroupsToRemove.push(occurrence.group);
+                }
+            }
+            occurrencesToRemove.concat(occurrences);
+        }
+
+        //iterate over occurrenceGroups and delete groups that only have one occurrence
+        for (let group of occurrenceGroupsToRemove) {
+            if (group.occurrences.length == 1) {
+                const key = group._id.toString();
+                //if job exists, then cancel it!
+                if (key in schedule.scheduledJobs) {
+                    const job = schedule.scheduledJobs[key];
+                    if (job != undefined) {
+                        job.cancel();
                     }
                 }
-            });
-            await Occurrence.deleteMany({ _id: { $in: dosage.occurrences } });
-        });
+                await OccurrenceGroup.deleteOne({
+                    _id: group._id,
+                });
+            } else {
+                //TODO: FILTER OCCURRENCES TO BE REMOVED FROM GROUP AND DELETE GROUP IF NECESSARY
+                let occurrenceToRemove = { _id: 0 };
+                //if there are multiple occurrences,
+                //remove index of posted occurrence
+                let indexOfOccToRemove = group.occurrences.findIndex((occ) =>
+                    occ.equals(occurrenceToRemove._id)
+                );
+                if (indexOfOccToRemove != -1) {
+                    group.occurrences.splice(indexOfOccToRemove, 1);
+                }
+                await group.save();
+            }
+        }
+
+        await Occurrence.deleteMany({ _id: { $in: occurrencesToRemove } });
 
         await Dosage.deleteMany({
             _id: {
@@ -310,8 +343,17 @@ export const fuzzySearchWithString = (req, res) => {
             res2.on("end", () => {
                 let respData = JSON.parse(data);
                 let matches = [];
-                let length =
-                    respData.suggestionGroup.suggestionList.suggestion.length;
+                let length;
+                if (
+                    respData.suggestionGroup.suggestionList != null &&
+                    respData.suggestionGroup.suggestionList.suggestion != null
+                ) {
+                    length =
+                        respData.suggestionGroup.suggestionList.suggestion
+                            .length;
+                } else {
+                    length = 0;
+                }
                 //max length to return is 5
                 length = length < 5 ? length : 5;
                 let i;
@@ -466,12 +508,11 @@ export const addOccurrence = async (req, res) => {
     Occurrence.findOneAndUpdate(
         { _id: occurrence._id },
         {
-            isTaken: occurrenceP.isTaken,
-            isComplete: true,
-            timeTaken: occurrenceP.timeTaken,
+            isTaken: true,
+            timeTaken: new Date(),
         },
         { new: true },
-        (err, occurrenceToUpdate) => {
+        async (err, occurrenceToUpdate) => {
             if (err) {
                 return res
                     .status(404)
@@ -482,12 +523,38 @@ export const addOccurrence = async (req, res) => {
                     .json({ message: "Occurrence not found" });
             } else {
                 //CANCEL NOTIFICATION
-                const key = occurrenceToUpdate._id.toString();
-                //if job exists, then cancel it!
-                if (key in schedule.scheduledJobs) {
-                    const job = schedule.scheduledJobs[key];
-                    if (job != undefined) {
-                        job.cancel();
+                let occurrenceGroup = await OccurrenceGroup.find({
+                    _id: occurrenceToUpdate.group,
+                });
+                //if occurrenceGroup exists then decide to unschedule/delete
+                if (occurrenceGroup.length != 0 && occurrenceGroup[0] != null) {
+                    occurrenceGroup = occurrenceGroup[0];
+                    if (occurrenceGroup.occurrences.length <= 1) {
+                        const key = occurrenceGroup._id.toString();
+                        //if job exists, then cancel it!
+                        if (key in schedule.scheduledJobs) {
+                            const job = schedule.scheduledJobs[key];
+                            if (job != undefined) {
+                                job.cancel();
+                            }
+                        }
+                        OccurrenceGroup.deleteOne({
+                            _id: occurrenceGroup._id,
+                        });
+                        shouldCancel = true;
+                    } else {
+                        //if there are multiple occurrences,
+                        //remove index of posted occurrence
+                        let indexOfOccToRemove = occurrenceGroup.occurrences.findIndex(
+                            (occ) => occ.equals(occurrenceToUpdate._id)
+                        );
+                        if (indexOfOccToRemove != -1) {
+                            occurrenceGroup.occurrences.splice(
+                                indexOfOccToRemove,
+                                1
+                            );
+                        }
+                        occurrenceGroup.save();
                     }
                 }
                 return res.status(200).json(occurrenceToUpdate);
@@ -600,19 +667,19 @@ const descheduleAndDeleteFutureOccurrences = (dosages) => {
         //we only want to remove occurrences that haven't happened yet
         let now = new Date();
         let occurrencesToRemove = dosage.occurrences.filter(
-            (occ) =>
-                !occ.isComplete && occ.scheduledDate.getTime() > now.getTime()
+            (occ) => !occ.isTaken && occ.scheduledDate.getTime() > now.getTime()
         );
         //deschedule the occurrences
-        occurrencesToRemove.forEach((occurrence) => {
-            let key = occurrence._id.toString();
-            if (key in schedule.scheduledJobs) {
-                const job = schedule.scheduledJobs[key];
-                if (job != null && job != undefined) {
-                    job.cancel();
-                }
-            }
-        });
+        //TODO: FIX
+        // occurrencesToRemove.forEach((occurrence) => {
+        //     let key = occurrence._id.toString();
+        //     if (key in schedule.scheduledJobs) {
+        //         const job = schedule.scheduledJobs[key];
+        //         if (job != null && job != undefined) {
+        //             job.cancel();
+        //         }
+        //     }
+        // });
         //delete the occurrences
         await Occurrence.deleteMany(occurrencesToRemove, (err) => {
             if (err) console.log("error deleting occurrences");
