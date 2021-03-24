@@ -158,38 +158,41 @@ export const scheduleWeeklyOccurrences = async (userId) => {
             return;
         }
     });
-    await user
-        .populate({
-            path: "medications",
-            populate: { path: "dosages", model: "Dosage" },
-        })
-        .execPopulate();
-    try {
-        await removeFutureOccurrences(user);
-    } catch (err) {
-        console.log(err);
-        return;
-    }
-    let occurrences = getScheduledDays(user);
     let now = new Date();
-    for (let day of occurrences) {
-        for (let med of day) {
-            //we found the right med
-            for (let dose of med.datesWTime) {
-                //ensure that the occurrence hasn't already passed
-                if (now.getTime() < dose.date.getTime()) {
-                    //create occurrence
-                    let occurrence = {
-                        isTaken: false,
-                        timeTaken: null,
-                        scheduledDate: dose.date,
-                        dosage: dose.dosageId,
-                    };
-                    let uDose = await Dosage.findOne({ _id: dose.dosageId });
-                    occurrence = new Occurrence(occurrence);
-                    await occurrence.save();
-                    uDose.occurrences.push(occurrence);
-                    await uDose.save();
+    //check is the user has already been scheduled this week
+    //if so, we don't want to add any more occurrences since they will be duplicates
+    let lastSunday = new Date();
+    lastSunday.setHours(0, 0, 0, 0);
+    lastSunday = lastSunday.getTime() - lastSunday.getDay() * 1000 * 3600 * 24;
+    if (user.lastScheduled.getTime() < lastSunday) {
+        await user
+            .populate({
+                path: "medications",
+                populate: { path: "dosages", model: "Dosage" },
+            })
+            .execPopulate();
+        let occurrences = getScheduledDays(user);
+        for (let day of occurrences) {
+            for (let med of day) {
+                //we found the right med
+                for (let dose of med.datesWTime) {
+                    //ensure that the occurrence hasn't already passed
+                    if (now.getTime() < dose.date.getTime()) {
+                        //create occurrence
+                        let occurrence = {
+                            isTaken: false,
+                            timeTaken: null,
+                            scheduledDate: dose.date,
+                            dosage: dose.dosageId,
+                        };
+                        let uDose = await Dosage.findOne({
+                            _id: dose.dosageId,
+                        });
+                        occurrence = new Occurrence(occurrence);
+                        await occurrence.save();
+                        uDose.occurrences.push(occurrence);
+                        await uDose.save();
+                    }
                 }
             }
         }
@@ -215,7 +218,12 @@ export const scheduleWeeklyOccurrences = async (userId) => {
         //iterate over each day and group together occurrences that happen in the same minute
         for (let i = 0; i < day.length; i++) {
             //if scheduledDate has already passed don't do anything
-            if (day[i].scheduledDate.getTime() < now.getTime()) continue;
+            //if occurrence has already been taken don't schedule it
+            if (
+                day[i].scheduledDate.getTime() < now.getTime() ||
+                day[i].isTaken
+            )
+                continue;
             let occurrenceGroup = new OccurrenceGroup();
             let assembleGroup = [];
             assembleGroup.push(day[i]);
@@ -231,7 +239,7 @@ export const scheduleWeeklyOccurrences = async (userId) => {
                 let nOccurrenceTime =
                     day[j].scheduledDate.getHours() +
                     day[j].scheduledDate.getMinutes();
-                if (occurrenceTime == nOccurrenceTime) {
+                if (occurrenceTime == nOccurrenceTime && !day[j].isTaken) {
                     assembleGroup.push(day[j]);
                     await Occurrence.findOneAndUpdate(
                         { _id: day[j]._id },
@@ -261,69 +269,70 @@ export const scheduleWeeklyOccurrences = async (userId) => {
             );
         }
     }
+    User.findOneAndUpdate({ _id: user._id }, { lastScheduled: now });
 };
 
-/**
- * Helper function for scheduleWeeklyOccurrences that removes
- * all future occurrences before scheduling the ones for this week.
- * This is to ensure we don't over populate the occurrences, since
- * we only want to schedule each future occurrence once.
- */
-const removeFutureOccurrences = async (user) => {
-    let occurrenceGroupIds = [];
-    for (let med of user.medications) {
-        for (let dosage of med.dosages) {
-            //first find all occurrences attached to dosage
-            let occurrences = await Occurrence.find({
-                _id: { $in: dosage.occurrences },
-            });
-            //get all occurrences that are scheduled to occur after
-            //the current date
-            let now = new Date();
-            let occurrencesToRemove = occurrences.filter(
-                (occurrence) =>
-                    occurrence.scheduledDate.getTime() > now.getTime()
-            );
+// /**
+//  * Helper function for scheduleWeeklyOccurrences that removes
+//  * all future occurrences before scheduling the ones for this week.
+//  * This is to ensure we don't over populate the occurrences, since
+//  * we only want to schedule each future occurrence once.
+//  */
+// const removeFutureOccurrences = async (user) => {
+//     let occurrenceGroupIds = [];
+//     for (let med of user.medications) {
+//         for (let dosage of med.dosages) {
+//             //first find all occurrences attached to dosage
+//             let occurrences = await Occurrence.find({
+//                 _id: { $in: dosage.occurrences },
+//             });
+//             //get all occurrences that are scheduled to occur after
+//             //the current date
+//             let now = new Date();
+//             let occurrencesToRemove = occurrences.filter(
+//                 (occurrence) =>
+//                     occurrence.scheduledDate.getTime() > now.getTime()
+//             );
 
-            for (let occ of occurrences) {
-                if (occurrenceGroupIds.indexOf(occ.group) == -1) {
-                    occurrenceGroupIds.push(occ.group);
-                }
-            }
-            //delete all future occurrences
-            let d = await Dosage.findById(dosage._id);
+//             for (let occ of occurrences) {
+//                 if (occurrenceGroupIds.indexOf(occ.group) == -1) {
+//                     occurrenceGroupIds.push(occ.group);
+//                 }
+//             }
+//             //delete all future occurrences
+//             let d = await Dosage.findById(dosage._id);
 
-            occurrencesToRemove.forEach((occ) => {
-                let index = d.occurrences.indexOf(occ._id);
-                if (index != -1) {
-                    d.occurrences.splice(index, 1);
-                }
-            });
+//             occurrencesToRemove.forEach((occ) => {
+//                 let index = d.occurrences.indexOf(occ._id);
+//                 if (index != -1) {
+//                     d.occurrences.splice(index, 1);
+//                 }
+//             });
 
-            await Occurrence.deleteMany(
-                { _id: { $in: occurrencesToRemove } },
-                (err) => {
-                    if (err) {
-                        console.log("cannot delete future occurrences");
-                        return;
-                    }
-                }
-            );
+//             await Occurrence.deleteMany(
+//                 { _id: { $in: occurrencesToRemove } },
+//                 (err) => {
+//                     if (err) {
+//                         console.log("cannot delete future occurrences");
+//                         return;
+//                     }
+//                 }
+//             );
 
-            await Dosage.findByIdAndUpdate(dosage._id, {
-                occurrences: d.occurrences,
-            });
-        }
-    }
-    await OccurrenceGroup.deleteMany(
-        { _id: { $in: occurrenceGroupIds } },
-        (err) => {
-            if (err) {
-                console.log("cannot delete occurrence");
-            }
-        }
-    );
-};
+//             await Dosage.findByIdAndUpdate(dosage._id, {
+//                 occurrences: d.occurrences,
+//             });
+//         }
+//     }
+//     await OccurrenceGroup.deleteMany(
+//         { _id: { $in: occurrenceGroupIds } },
+//         (err) => {
+//             if (err) {
+//                 console.log("cannot delete occurrence");
+//             }
+//         }
+//     );
+// };
 
 const Platform = {
     iOS: "ios",
