@@ -541,7 +541,6 @@ export const addOccurrence = async (req, res) => {
                         OccurrenceGroup.deleteOne({
                             _id: occurrenceGroup._id,
                         });
-                        shouldCancel = true;
                     } else {
                         //if there are multiple occurrences,
                         //remove index of posted occurrence
