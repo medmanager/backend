@@ -1,16 +1,16 @@
 import {
     addNewMedication,
-    addOccurrence,
     deleteMedicationFromID,
     fuzzySearchWithString,
     getDosages,
     getMedicationFromID,
     getMedications,
     getOccurrenceFromID,
-    getOccurrences,
     getOccurrenceGroupFromID,
+    getOccurrences,
     getTrackingInfo,
     registerDeviceKey,
+    takeDosageOccurrence,
     updateMedicationFromID,
 } from "../controllers/controller";
 import {
@@ -33,16 +33,13 @@ const routes = (app) => {
 
     app.route("/dosage").get(loginRequired, getDosages);
 
-    app.route("/occurrence/:occurrenceId").get(
-        loginRequired,
-        getOccurrenceFromID
-    );
+    app.route("/schedule/occurrence/:occurrenceId")
+        .get(loginRequired, getOccurrenceFromID)
+        .post(loginRequired, takeDosageOccurrence);
 
-    app.route("/schedule/occurrences")
-        .get(loginRequired, getOccurrences)
-        .post(loginRequired, addOccurrence);
+    app.route("/schedule/occurrences").get(loginRequired, getOccurrences);
 
-    app.route("/occurrenceGroup/:occurrenceGroupId").get(
+    app.route("/schedule/occurrenceGroup/:occurrenceGroupId").get(
         loginRequired,
         getOccurrenceGroupFromID
     );
@@ -53,7 +50,7 @@ const routes = (app) => {
 
     app.route("/auth/verify/:token").get(verify);
 
-    app.route("/login").post(login);
+    app.route("/auth/login").post(login);
 
     //login required to logout ?????
     //  app.route("/logout").post(loginRequired, logout);

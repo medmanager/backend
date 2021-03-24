@@ -2,8 +2,8 @@ import https from "https";
 import mongoose from "mongoose";
 import schedule from "node-schedule";
 import { DosageSchema } from "../models/Dosage";
-import { OccurrenceSchema, OccurrenceGroupSchema } from "../models/Occurrence";
 import { MedicationSchema } from "../models/Medication";
+import { OccurrenceGroupSchema, OccurrenceSchema } from "../models/Occurrence";
 import { UserSchema } from "../models/User";
 import { scheduleMedication } from "./cronController";
 
@@ -74,7 +74,7 @@ export const addNewMedication = async (req, res) => {
         });
     }
 
-    return res.status(200).json(newMedication);
+    return res.status(201).json(newMedication);
 };
 
 export const getMedications = (req, res) => {
@@ -476,29 +476,51 @@ export const getOccurrences = async (req, res) => {
 };
 
 /*function to post when a medication is taken */
-export const addOccurrence = async (req, res) => {
+export const takeDosageOccurrence = async (req, res) => {
     if (req.user == null) {
         return res.status(400).json({
             message: "token error: cannot find user from token!",
         });
     }
-    let occurrenceP = req.body;
-    if (occurrenceP == undefined) {
-        return res.status(400).json({ message: "missing occurrence data!" });
-    }
+    const { occurrenceId } = req.params;
     let occurrence = null;
+    let medication = null;
+    let dosage = null;
     try {
-        occurrence = await Occurrence.findById(occurrenceP._id);
+        occurrence = await Occurrence.findById(occurrenceId);
+
+        if (!occurrence) {
+            return res.status(404).json({
+                message:
+                    "Error finding dosage and medication that correspond with the occurrence",
+            });
+        }
+
         //check that the occurrence belongs to the user posting it
-        let dosage = await Dosage.findById(occurrence.dosage);
-        let medication = await Medication.findById(dosage.medication);
+        dosage = await Dosage.findById(occurrence.dosage);
+
+        if (!dosage) {
+            return res.state(404).json({
+                message: "Error finding dosage",
+            });
+        }
+
+        medication = await Medication.findById(dosage.medication);
+
+        if (!medication) {
+            return res.status(404).json({
+                message:
+                    "Error finding dosage and medication that correspond with the occurrence",
+            });
+        }
+
         if (!medication.user.equals(req.user)) {
             return res.status(401).json({
                 message: "You are not authorized to edit this occurrence",
             });
         }
     } catch (err) {
-        return res.status(401).json({
+        return res.status(500).json({
             message:
                 "Error finding dosage and medication that correspond with the occurrence",
         });
@@ -506,7 +528,7 @@ export const addOccurrence = async (req, res) => {
 
     //update occurrence
     Occurrence.findOneAndUpdate(
-        { _id: occurrence._id },
+        { _id: occurrenceId },
         {
             isTaken: true,
             timeTaken: new Date(),
@@ -541,7 +563,6 @@ export const addOccurrence = async (req, res) => {
                         OccurrenceGroup.deleteOne({
                             _id: occurrenceGroup._id,
                         });
-                        shouldCancel = true;
                     } else {
                         //if there are multiple occurrences,
                         //remove index of posted occurrence
@@ -643,38 +664,45 @@ export const getTrackingInfo = async (req, res) => {
     }
 };
 
+/**
+ * Gets a single occurrence group
+ */
 export const getOccurrenceGroupFromID = async (req, res) => {
-    if (req.user == null) {
-        return res.status(400).json({
-            message: "token error: cannot find user from token!",
-        });
+    const { occurrenceGroupId } = req.params;
+    const userId = req.user;
+    if (userId == null) {
+        return res
+            .status(404)
+            .json({ message: "token invalid: cannot get user" });
     }
+
+    let occurrenceGroup;
     try {
-        let occurrenceGroup = await OccurrenceGroup.findById(
-            req.params.occurrenceGroupId
-        );
-        if (occurrenceGroup.user != req.user) {
+        occurrenceGroup = await OccurrenceGroup.findById(occurrenceGroupId);
+        if (!occurrenceGroup) {
+            return res.status(404).json({ message: "Occurrence not found" });
+        }
+        if (occurrenceGroup.user != userId) {
             return res.status(401).json({
                 message: "You are not authorized to get this occurrence group",
             });
         }
-        await occurrenceGroup
-            .populate({
-                path: "occurrences",
-                model: "Occurrence",
-                populate: {
-                    path: "dosage",
-                    model: "Dosage",
-                    populate: { path: "medication", model: "Medication" },
-                },
-            })
-            .execPopulate();
-        return res.send(200).json(occurrenceGroup);
     } catch (err) {
-        return res.status(404).json({
-            message: "cannot find occurrence group!",
-        });
+        return res.send(err);
     }
+
+    await occurrenceGroup
+        .populate({
+            path: "occurrences",
+            model: "Occurrence",
+            populate: {
+                path: "dosage",
+                model: "Dosage",
+                populate: { path: "medication", model: "Medication" },
+            },
+        })
+        .execPopulate();
+    return res.status(200).json(occurrenceGroup);
 };
 
 /**

@@ -4,10 +4,9 @@ import mongoose from "mongoose";
 import schedule from "node-schedule";
 import path from "path";
 import { DosageSchema } from "../models/Dosage";
-import { OccurrenceSchema, OccurrenceGroupSchema } from "../models/Occurrence";
 import { MedicationSchema } from "../models/Medication";
+import { OccurrenceGroupSchema, OccurrenceSchema } from "../models/Occurrence";
 import { UserSchema } from "../models/User";
-import { addNewMedication } from "./controller";
 
 const User = mongoose.model("User", UserSchema);
 const Medication = mongoose.model("Medication", MedicationSchema);
@@ -140,7 +139,7 @@ export const scheduleMedication = async (medication, userId) => {
                     occurrenceGroup._id.toString(),
                     occurrenceGroup.scheduledDate,
                     function () {
-                        sendNotification(occurrenceGroup._id);
+                        sendNotification(occurrenceGroup._id, userId);
                     }
                 );
             }
@@ -257,7 +256,7 @@ export const scheduleWeeklyOccurrences = async (userId) => {
                 occurrenceGroup._id.toString(),
                 occurrenceGroup.scheduledDate,
                 function () {
-                    sendNotification(occurrenceGroup._id);
+                    sendNotification(occurrenceGroup._id, userId);
                 }
             );
         }
@@ -337,23 +336,20 @@ const Platform = {
  * - https://github.com/node-apn/node-apn - For sending apple push notifications
  * - https://firebase.google.com/docs/cloud-messaging/send-message - For sending android push notifications
  * @param {String} occurrenceId Occurrence id
+ * @param {String} userId User id
  */
-const sendNotification = async (occurrenceGroupId) => {
-    let occurrenceGroup = await OccurrenceGroup.findById(occurrenceGroupId);
-    await occurrenceGroup
-        .populate({
-            path: "occurrences",
-            model: "Occurrence",
-            populate: {
-                path: "dosage",
-                model: "Dosage",
-                populate: { path: "medication", model: "Medication" },
-            },
-        })
-        .execPopulate();
-    let user = await User.findById(
-        occurrenceGroup.occurrences[0].dosage.medication.user
-    );
+const sendNotification = async (occurrenceGroupId, userId) => {
+    let occurrenceGroup = await OccurrenceGroup.findById(
+        occurrenceGroupId
+    ).populate({
+        path: "occurrences",
+        model: "Occurrence",
+        populate: {
+            path: "dosage",
+            model: "Dosage",
+        },
+    });
+    let user = await User.findById(userId);
     //check that at least one of the occurrences belongs to a dosage that has sendReminder as true
     let sendNotification = false;
     for (let occurrence of occurrenceGroup.occurrences) {
@@ -387,19 +383,18 @@ const sendNotification = async (occurrenceGroupId) => {
         const notification = new apn.Notification();
 
         notification.expiry = Math.floor(Date.now() / 1000) + 3600; // Expires 1 hour from now.
-        notification.badge = 1;
         notification.sound = "ping.aiff";
         notification.alert =
             "It's time to take your medications. Open the MedManager app to see more.";
-        notification.payload = { occurrenceGroupId: occurrenceGroup._id };
+        notification.payload = { occurrenceGroupId };
         notification.topic = "org.reactjs.native.example.MedManager";
 
         const deviceToken = user.deviceInfo.token;
         const deviceTokens = [deviceToken];
         const response = await apnProvider.send(notification, deviceTokens);
-        if (response.sent) {
+        if (response.sent.length) {
             console.log("Notification successfully sent");
-        } else if (response.failed) {
+        } else {
             console.log("Notification failed to send");
             for (const error of response.failed) {
                 console.error(error);
