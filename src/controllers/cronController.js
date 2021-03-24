@@ -391,7 +391,7 @@ const sendNotification = async (occurrenceGroupId) => {
         notification.sound = "ping.aiff";
         notification.alert =
             "It's time to take your medications. Open the MedManager app to see more.";
-        notification.payload = { group: occurrenceGroup };
+        notification.payload = { occurrenceGroupId: occurrenceGroup._id };
         notification.topic = "org.reactjs.native.example.MedManager";
 
         const deviceToken = user.deviceInfo.token;
@@ -438,7 +438,7 @@ const sendNotification = async (occurrenceGroupId) => {
                     "It's take to take your medication. Open the MedManager app to see more.",
             },
             data: {
-                medication: "medication",
+                occurrenceGroupId: occurrenceGroup._id,
             },
         };
 

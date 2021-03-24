@@ -8,9 +8,10 @@ import {
     getMedications,
     getOccurrenceFromID,
     getOccurrences,
+    getOccurrenceGroupFromID,
+    getTrackingInfo,
     registerDeviceKey,
     updateMedicationFromID,
-    getTrackingInfo,
 } from "../controllers/controller";
 import {
     login,
@@ -40,6 +41,11 @@ const routes = (app) => {
     app.route("/schedule/occurrences")
         .get(loginRequired, getOccurrences)
         .post(loginRequired, addOccurrence);
+
+    app.route("/occurrenceGroup/:occurrenceGroupId").get(
+        loginRequired,
+        getOccurrenceGroupFromID
+    );
 
     app.route("/tracking").get(loginRequired, getTrackingInfo);
 

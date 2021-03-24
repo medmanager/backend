@@ -635,10 +635,44 @@ export const getTrackingInfo = async (req, res) => {
                 });
             }
         }
-        res.send(200).json(trackingArr);
+        return res.send(200).json(trackingArr);
     } catch (err) {
         return res.status(404).json({
             message: "cannot find tracking information from user!",
+        });
+    }
+};
+
+export const getOccurrenceGroupFromID = async (req, res) => {
+    if (req.user == null) {
+        return res.status(400).json({
+            message: "token error: cannot find user from token!",
+        });
+    }
+    try {
+        let occurrenceGroup = await OccurrenceGroup.findById(
+            req.params.occurrenceGroupId
+        );
+        if (occurrenceGroup.user != req.user) {
+            return res.status(401).json({
+                message: "You are not authorized to get this occurrence group",
+            });
+        }
+        await occurrenceGroup
+            .populate({
+                path: "occurrences",
+                model: "Occurrence",
+                populate: {
+                    path: "dosage",
+                    model: "Dosage",
+                    populate: { path: "medication", model: "Medication" },
+                },
+            })
+            .execPopulate();
+        return res.send(200).json(occurrenceGroup);
+    } catch (err) {
+        return res.status(404).json({
+            message: "cannot find occurrence group!",
         });
     }
 };
