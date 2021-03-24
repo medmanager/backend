@@ -438,7 +438,7 @@ const sendNotification = async (occurrenceGroupId) => {
                     "It's take to take your medication. Open the MedManager app to see more.",
             },
             data: {
-                occurrenceGroupId: occurrenceGroup._id,
+                occurrenceGroupId: occurrenceGroup._id.toString(),
             },
         };
 
