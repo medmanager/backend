@@ -3,6 +3,31 @@ import mongoose from "mongoose";
 
 const Schema = mongoose.Schema;
 
+export const SettingsSchema = new Schema({
+    notificationSettings: {
+        silenceAll: {
+            type: Boolean,
+            default: false
+        },
+        hideMedName: {
+            type: Boolean,
+            default: true
+        }
+    },
+    hasEmergencyContact: {
+        type: Boolean
+    },
+    emergencyContact: {
+        name: {
+            type: String
+        },
+        phoneNumber: {
+            type: String
+        }
+    }
+});
+
+
 export const UserSchema = new Schema({
     email: {
         type: String,
@@ -39,6 +64,9 @@ export const UserSchema = new Schema({
             type: String,
         },
     },
+    settings: {
+        type: SettingsSchema
+    }
 });
 
 UserSchema.methods.comparePassword = (password, hashPassword) => {
