@@ -20,6 +20,7 @@ export const MedicationSchema = new Schema({
     amount: {
         type: Number,
         required: true,
+        min: 0,
     },
     amountUnit: {
         type: String,
