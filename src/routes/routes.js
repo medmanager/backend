@@ -35,7 +35,7 @@ const routes = (app) => {
 
     app.route("/schedule/occurrence/:occurrenceId")
         .get(loginRequired, getOccurrenceFromID)
-        .post(loginRequired, takeDosageOccurrence);
+        .put(loginRequired, takeDosageOccurrence);
 
     app.route("/schedule/occurrences").get(loginRequired, getOccurrences);
 

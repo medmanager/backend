@@ -491,8 +491,7 @@ export const takeDosageOccurrence = async (req, res) => {
 
         if (!occurrence) {
             return res.status(404).json({
-                message:
-                    "Error finding dosage and medication that correspond with the occurrence",
+                message: "Error finding occurrence",
             });
         }
 
@@ -509,8 +508,7 @@ export const takeDosageOccurrence = async (req, res) => {
 
         if (!medication) {
             return res.status(404).json({
-                message:
-                    "Error finding dosage and medication that correspond with the occurrence",
+                message: "Error finding medication",
             });
         }
 
@@ -520,6 +518,7 @@ export const takeDosageOccurrence = async (req, res) => {
             });
         }
     } catch (err) {
+        console.error(err);
         return res.status(500).json({
             message:
                 "Error finding dosage and medication that correspond with the occurrence",
@@ -578,6 +577,14 @@ export const takeDosageOccurrence = async (req, res) => {
                         occurrenceGroup.save();
                     }
                 }
+
+                // decrement the amount of capsules, tablets, etc. remaining
+                await Medication.findOneAndUpdate(
+                    { _id: medication._id },
+                    {
+                        $inc: { amount: -1 },
+                    }
+                );
                 return res.status(200).json(occurrenceToUpdate);
             }
         }
