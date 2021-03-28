@@ -158,6 +158,7 @@ export const scheduleWeeklyOccurrences = async (userId) => {
             return;
         }
     });
+    await deleteOccurrenceGroups(user);
     let now = new Date();
     //check is the user has already been scheduled this week
     //if so, we don't want to add any more occurrences since they will be duplicates
@@ -272,67 +273,33 @@ export const scheduleWeeklyOccurrences = async (userId) => {
     User.findOneAndUpdate({ _id: user._id }, { lastScheduled: now });
 };
 
-// /**
-//  * Helper function for scheduleWeeklyOccurrences that removes
-//  * all future occurrences before scheduling the ones for this week.
-//  * This is to ensure we don't over populate the occurrences, since
-//  * we only want to schedule each future occurrence once.
-//  */
-// const removeFutureOccurrences = async (user) => {
-//     let occurrenceGroupIds = [];
-//     for (let med of user.medications) {
-//         for (let dosage of med.dosages) {
-//             //first find all occurrences attached to dosage
-//             let occurrences = await Occurrence.find({
-//                 _id: { $in: dosage.occurrences },
-//             });
-//             //get all occurrences that are scheduled to occur after
-//             //the current date
-//             let now = new Date();
-//             let occurrencesToRemove = occurrences.filter(
-//                 (occurrence) =>
-//                     occurrence.scheduledDate.getTime() > now.getTime()
-//             );
-
-//             for (let occ of occurrences) {
-//                 if (occurrenceGroupIds.indexOf(occ.group) == -1) {
-//                     occurrenceGroupIds.push(occ.group);
-//                 }
-//             }
-//             //delete all future occurrences
-//             let d = await Dosage.findById(dosage._id);
-
-//             occurrencesToRemove.forEach((occ) => {
-//                 let index = d.occurrences.indexOf(occ._id);
-//                 if (index != -1) {
-//                     d.occurrences.splice(index, 1);
-//                 }
-//             });
-
-//             await Occurrence.deleteMany(
-//                 { _id: { $in: occurrencesToRemove } },
-//                 (err) => {
-//                     if (err) {
-//                         console.log("cannot delete future occurrences");
-//                         return;
-//                     }
-//                 }
-//             );
-
-//             await Dosage.findByIdAndUpdate(dosage._id, {
-//                 occurrences: d.occurrences,
-//             });
-//         }
-//     }
-//     await OccurrenceGroup.deleteMany(
-//         { _id: { $in: occurrenceGroupIds } },
-//         (err) => {
-//             if (err) {
-//                 console.log("cannot delete occurrence");
-//             }
-//         }
-//     );
-// };
+/**
+ * Helper function for scheduleWeeklyOccurrences that removes all occurrenceGroups
+ * Right now, we'll remove all occurrenceGroups on every User since occurrenceGroups
+ * are directly related to scheduled jobs.
+ *
+ * One case this doesn't handle: a job is scheduled on Saturday and an occurrenceGroup
+ * is created for Saturday at 9pm. If the user forgets to take their medication and
+ * the backend fires the emergency contact function on Sunday at 9am, the occurrenceGroup
+ * would have been deleted when this function was called at 12am on Sunday for the user.
+ *
+ * Possible solutions:
+ * Check if occurrenceGroup has an emergency contact job scheduled prior to deletion.
+ * If occurrenceGroup contains the emergency contact job id, this can be used to
+ * check whether the key exists in schedule.scheduledJobs
+ */
+const deleteOccurrenceGroups = async (user) => {
+    let occurrenceGroups = await OccurrenceGroup.find({ user: user._id });
+    occurrenceGroups.map((oG) => (oG = oG._id));
+    await OccurrenceGroup.deleteMany(
+        { _id: { $in: occurrenceGroups } },
+        (err) => {
+            if (err) {
+                console.log("cannot delete occurrenceGroups");
+            }
+        }
+    );
+};
 
 const Platform = {
     iOS: "ios",
