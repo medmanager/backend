@@ -18,6 +18,8 @@ import {
     loginRequired,
     register,
     verify,
+    updateUserSettings,
+    updateUser
 } from "../controllers/userControllers";
 
 const routes = (app) => {
@@ -56,6 +58,10 @@ const routes = (app) => {
     //  app.route("/logout").post(loginRequired, logout);
 
     app.route("/register/notifications").post(loginRequired, registerDeviceKey);
+
+    app.route("/user/updatesettings").post(loginRequired, updateUserSettings);
+
+    app.route("/user/update").post(loginRequired, updateUser);
 
     app.route("/medication/search/:searchStr")
         //currently we do not check for login

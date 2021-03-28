@@ -1,9 +1,10 @@
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
-import { UserSchema } from "../models/User";
+import { SettingsSchema, UserSchema } from "../models/User";
 
 let User = mongoose.model("User", UserSchema);
+let Settings = mongoose.model("Settings", SettingsSchema);
 
 export const loginRequired = (req, res, next) => {
     if (req.user) {
@@ -81,3 +82,73 @@ export const verify = (req, res) => {
         }
     });
 };
+
+
+// updates the settings schema located within the user based on the body data passed in
+// (data passed in to the request body is the new settings schema for the given user)
+export const updateUserSettings = async (req, res) => {
+    if (req.user == null) {
+        return res.status(400).json({
+            message: "token error: no user found from token!"
+        });
+    }
+
+    let user;
+    try {
+        user = await User.findById(req.user);
+    } catch (err) {
+        return res.status(404).json({message: "user cannot be found"});
+    }
+
+    let newSettings = new Settings(req.body);
+
+    try {
+        user.settings = newSettings;
+        await user.save();
+    } catch (err) {
+        return res.status(500).json({
+            message: "cannot save user settings!"
+        });
+    }
+
+    return res.status(200).json(newSettings);
+};
+
+
+// updates the fields inside a user based on the request body's data passed in
+// (the passed in request data is a user schema)
+export const updateUser = async (req, res) => {
+    if (req.user == null) {
+        return res.status(400).json({
+            message: "token error: user not found from token!"
+        });
+    }
+
+    let user;
+    try {
+        user = await User.findById(req.user);
+    } catch (err) {
+        return res.status(404).json({message: "user cannot be found!"});
+    }
+
+    let updatedUser = new User(req.body);
+    updatedUser.hashPassword = bcrypt.hashSync(req.body.password, 10);
+
+    try {
+        User.findOneAndUpdate(
+            { _id: user._id },
+            req.body,
+            function( error, result) {
+                console.log(result);
+                console.log(error);
+            }
+        );
+    } catch (err) {
+        console.log(err);
+        return res.status(500).json({
+            message: "cannot save the updated user!"
+        });
+    }
+
+    return res.status(200).json(updatedUser);
+}

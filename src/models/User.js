@@ -3,6 +3,31 @@ import mongoose from "mongoose";
 
 const Schema = mongoose.Schema;
 
+export const SettingsSchema = new Schema({
+    notificationSettings: {
+        silenceAll: {
+            type: Boolean,
+            default: false,
+        },
+        hideMedName: {
+            type: Boolean,
+            default: true,
+        },
+    },
+    hasEmergencyContact: {
+        type: Boolean,
+        default: false,
+    },
+    emergencyContact: {
+        name: {
+            type: String,
+        },
+        phoneNumber: {
+            type: String,
+        },
+    },
+});
+
 export const UserSchema = new Schema({
     email: {
         type: String,
@@ -42,6 +67,9 @@ export const UserSchema = new Schema({
     lastScheduled: {
         type: Date,
         default: Date.now,
+    },
+    settings: {
+        type: SettingsSchema,
     },
 });
 
