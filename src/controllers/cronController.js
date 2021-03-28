@@ -258,7 +258,6 @@ export const scheduleWeeklyOccurrences = async (userId) => {
             occurrenceGroup.scheduledDate = new Date(
                 assembleGroup[0].scheduledDate.getTime()
             ); //save occurrence group
-            await occurrenceGroup.save();
 
             //schedule job
             schedule.scheduleJob(
@@ -268,6 +267,7 @@ export const scheduleWeeklyOccurrences = async (userId) => {
                     sendNotification(occurrenceGroup._id, userId);
                 }
             );
+            await occurrenceGroup.save();
         }
     }
     User.findOneAndUpdate({ _id: user._id }, { lastScheduled: now });
@@ -339,6 +339,27 @@ const sendNotification = async (occurrenceGroupId, userId) => {
         OccurrenceGroup.deleteOne({ _id: occurrenceGroup._id });
         return;
     }
+
+    //if the user has emergency contacts on,
+    //create an emergency contact job and schedule it
+    //we need an ID for the emergency contact job to differentiate
+    //the emergency contact job from the occurrenceGroup job
+    //NOTE: this code hasn't been tested
+    if (user.settings.hasEmergencyContact) {
+        let emergencyJobId = ObjectID();
+        occurrenceGroup.emergencyJobId = emergencyJobId;
+        let dateToFire = new Date();
+        let waitingTime = 1000 * 3600 * 12;
+        dateToFire = new Date(dateToFire.getTime() + waitingTime);
+        schedule.scheduleJob(
+            emergencyJobId.toString(),
+            dateToFire,
+            function () {
+                emergencyContact(occurrenceGroup._id);
+            }
+        );
+    }
+    await occurrenceGroup.save();
     console.log(user.deviceInfo);
     if (user.deviceInfo.os === Platform.iOS) {
         //ios logic
@@ -430,9 +451,42 @@ const sendNotification = async (occurrenceGroupId, userId) => {
                 console.log("Error sending message: ", error);
             });
     }
+};
 
-    //once notification has been sent, delete occurrenceGroup
-    //OccurrenceGroup.deleteOne({ _id: occurrenceGroup._id });
+/**
+ * Function passed into emergency contact job
+ * Find occurrence group and determine whether or not to send the emergency contact
+ * a notification. The only case we want to send a message is when the user has
+ * emergency contacts enabled (check again just incase they disabled it after this
+ * job was scheduled) and the occurrence group exists and has at least one occurrence
+ * on it that has not been taken by the patient.
+ * @param {ObjectId} occurrenceGroupId
+ */
+const emergencyContact = async (occurrenceGroupId) => {
+    let occurrenceGroup = await OccurrenceGroup.findById(
+        occurrenceGroupId
+    ).populate({
+        path: "occurrences",
+        model: "Occurrence",
+    });
+    //if occurrence group doesn't exist return
+    if (occurrenceGroup == undefined) return;
+    let user = await User.findById(occurrenceGroup.user);
+    //if user doesn't exist return
+    if (user == undefined) return;
+
+    let sendMessage = false;
+    //if one of the occurrences hasn't been taken yet, we want to send a message
+    for (let occurrence of occurrenceGroup.occurrences) {
+        if (!occurrence.isTaken) sendMessage = true;
+    }
+    if (!sendMessage) return;
+
+    //@TODO: send the message to the emergency contact using the phone number
+    //provided in the user's settings
+
+    //delete occurrenceGroup (we don't need to remove the reference from each of the occurrences)
+    OccurrenceGroup.findByIdAndDelete(occurrenceGroup._id);
 };
 
 /**
@@ -582,7 +636,7 @@ const getScheduledMedicationDays = (med) => {
             }
         }
     }
-    //eaving prints for testing purposes
+    //leaving prints for testing purposes
     // let i = 0;
     // scheduledDays.forEach(day => {
     //     console.log("day: " + i);

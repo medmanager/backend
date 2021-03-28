@@ -37,4 +37,9 @@ export const OccurrenceGroupSchema = new Schema({
         type: Schema.Types.ObjectId,
         ref: "User",
     },
+    emergencyJobId: {
+        //should we be using Schema.Types.ObjectId???
+        type: Schema.Types.ObjectId,
+        default: null,
+    },
 });
