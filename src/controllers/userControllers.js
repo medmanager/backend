@@ -85,8 +85,6 @@ export const verify = (req, res) => {
     });
 };
 
-<<<<<<< HEAD
-=======
 /**
  * Gets the object that describes the current logged in user
  * This is used for displaying information in the settings tab
@@ -108,7 +106,6 @@ export const getCurrentUser = async (req, res) => {
     return res.status(200).json(user);
 };
 
->>>>>>> d3f4e4d399fdbaa7906fdb1b17adebb83edcb182
 // updates the settings schema located within the user based on the body data passed in
 // (data passed in to the request body is the new settings schema for the given user)
 export const updateUserSettings = async (req, res) => {
