@@ -60,9 +60,9 @@ const routes = (app) => {
 
     app.route("/register/notifications").post(loginRequired, registerDeviceKey);
 
-    app.route("/user/updatesettings").post(loginRequired, updateUserSettings);
+    app.route("/user/updateSettings").put(loginRequired, updateUserSettings);
 
-    app.route("/user/update").post(loginRequired, updateUser);
+    app.route("/user/update").put(loginRequired, updateUser);
 
     app.route("/getCurrentUser").get(loginRequired, getCurrentUser);
 

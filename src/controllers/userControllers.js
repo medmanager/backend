@@ -85,8 +85,6 @@ export const verify = (req, res) => {
     });
 };
 
-<<<<<<< HEAD
-=======
 /**
  * Gets the object that describes the current logged in user
  * This is used for displaying information in the settings tab
@@ -103,12 +101,9 @@ export const getCurrentUser = async (req, res) => {
         });
     }
 
-    console.log({ user });
-
     return res.status(200).json(user);
 };
 
->>>>>>> d3f4e4d399fdbaa7906fdb1b17adebb83edcb182
 // updates the settings schema located within the user based on the body data passed in
 // (data passed in to the request body is the new settings schema for the given user)
 export const updateUserSettings = async (req, res) => {
@@ -148,31 +143,21 @@ export const updateUser = async (req, res) => {
         });
     }
 
-    let user;
     try {
-        user = await User.findById(req.user);
+        await User.findById(req.user);
     } catch (err) {
         return res.status(404).json({ message: "user cannot be found!" });
     }
 
-    let updatedUser = new User(req.body);
-    updatedUser.hashPassword = bcrypt.hashSync(req.body.password, 10);
-
+    let user;
     try {
-        User.findOneAndUpdate(
-            { _id: user._id },
-            req.body,
-            function (error, result) {
-                console.log(result);
-                console.log(error);
-            }
-        );
+        user = await User.findByIdAndUpdate(req.user, req.body);
     } catch (err) {
-        console.log(err);
+        console.error(err);
         return res.status(500).json({
             message: "cannot save the updated user!",
         });
     }
 
-    return res.status(200).json(updatedUser);
+    return res.status(200).json(user);
 };
