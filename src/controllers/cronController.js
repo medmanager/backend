@@ -323,6 +323,7 @@ const sendNotification = async (occurrenceGroupId, userId) => {
         populate: {
             path: "dosage",
             model: "Dosage",
+            populate: { path: "medication", model: "Medication" },
         },
     });
     let user = await User.findById(userId);
@@ -333,11 +334,6 @@ const sendNotification = async (occurrenceGroupId, userId) => {
             sendNotification = true;
             break;
         }
-    }
-    //if we shouldn't send notification, delete occurrenceGroup and return
-    if (!sendNotification) {
-        OccurrenceGroup.deleteOne({ _id: occurrenceGroup._id });
-        return;
     }
 
     //if the user has emergency contacts on,
@@ -359,8 +355,59 @@ const sendNotification = async (occurrenceGroupId, userId) => {
             }
         );
     }
+
+    //if we shouldn't send notification, delete occurrenceGroup and return
+    //only delete if the user doesn't have emergency contacts enabled
+    if (
+        (!sendNotification || user.settings.notificationSettings.silenceAll) &&
+        !user.settings.hasEmergencyContact
+    ) {
+        OccurrenceGroup.deleteOne({ _id: occurrenceGroup._id });
+        return;
+        //if the user still has emergency contacts enabled we don't want to delete occurrence group
+    } else if (
+        !sendNotification ||
+        user.settings.notificationSettings.silenceAll
+    ) {
+        return;
+    }
+
     await occurrenceGroup.save();
     console.log(user.deviceInfo);
+
+    let alertMessage;
+    if (user.settings.notificationSettings.hideMedName) {
+        alertMessage =
+            "It's time to take your medications. Open the MedManager app to see more.";
+    } else {
+        alertMessage = "It's time to take ";
+        for (let i = 0; i < occurrenceGroup.occurrences.length; i++) {
+            alertMessage +=
+                occurrenceGroup.occurrences[i].dosage.dose +
+                " " +
+                occurrenceGroup.occurrences[i].dosage.medication.amountUnit +
+                " of " +
+                occurrenceGroup.occurrences[i].dosage.medication.name +
+                " (" +
+                occurrenceGroup.occurrences[i].dosage.medication.strength +
+                " " +
+                occurrenceGroup.occurrences[i].dosage.medication.strengthUnit +
+                ")";
+
+            //include comma at the end of this if it's not the end
+            if (occurrenceGroup.occurrences.length == 2 && i == 0) {
+                alertMessage += " and ";
+            } else if (i == occurrenceGroup.occurrences.length - 2) {
+                alertMessage += ", and ";
+            } else if (
+                occurrenceGroup.occurrences.length > 1 &&
+                i != occurrenceGroup.occurrences.length - 1
+            ) {
+                alertMessage += ", ";
+            }
+        }
+    }
+
     if (user.deviceInfo.os === Platform.iOS) {
         //ios logic
         const APPLE_TEAM_ID = "984MGH966E"; // obtained from Apple developer account
@@ -381,8 +428,7 @@ const sendNotification = async (occurrenceGroupId, userId) => {
 
         notification.expiry = Math.floor(Date.now() / 1000) + 3600; // Expires 1 hour from now.
         notification.sound = "ping.aiff";
-        notification.alert =
-            "It's time to take your medications. Open the MedManager app to see more.";
+        notification.alert = alertMessage;
         notification.payload = { occurrenceGroupId };
         notification.topic = "org.reactjs.native.example.MedManager";
 
@@ -426,8 +472,7 @@ const sendNotification = async (occurrenceGroupId, userId) => {
         let payload = {
             notification: {
                 title: "It's medication time!",
-                body:
-                    "It's take to take your medication. Open the MedManager app to see more.",
+                body: alertMessage,
             },
             data: {
                 occurrenceGroupId: occurrenceGroup._id.toString(),
