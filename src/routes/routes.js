@@ -14,12 +14,13 @@ import {
     updateMedicationFromID,
 } from "../controllers/controller";
 import {
+    getCurrentUser,
     login,
     loginRequired,
     register,
-    verify,
+    updateUser,
     updateUserSettings,
-    updateUser
+    verify,
 } from "../controllers/userControllers";
 
 const routes = (app) => {
@@ -62,6 +63,8 @@ const routes = (app) => {
     app.route("/user/updatesettings").post(loginRequired, updateUserSettings);
 
     app.route("/user/update").post(loginRequired, updateUser);
+
+    app.route("/getCurrentUser").get(loginRequired, getCurrentUser);
 
     app.route("/medication/search/:searchStr")
         //currently we do not check for login
