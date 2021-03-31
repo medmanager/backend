@@ -3,6 +3,9 @@
 ### APN Key ###
 *.p8
 
+### Twilio .env file ###
+*.env
+
 ### Git ###
 *.orig
 

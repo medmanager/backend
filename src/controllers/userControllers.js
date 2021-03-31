@@ -101,8 +101,6 @@ export const getCurrentUser = async (req, res) => {
         });
     }
 
-    console.log({ user });
-
     return res.status(200).json(user);
 };
 
@@ -145,31 +143,21 @@ export const updateUser = async (req, res) => {
         });
     }
 
-    let user;
     try {
-        user = await User.findById(req.user);
+        await User.findById(req.user);
     } catch (err) {
         return res.status(404).json({ message: "user cannot be found!" });
     }
 
-    let updatedUser = new User(req.body);
-    updatedUser.hashPassword = bcrypt.hashSync(req.body.password, 10);
-
+    let user;
     try {
-        User.findOneAndUpdate(
-            { _id: user._id },
-            req.body,
-            function (error, result) {
-                console.log(result);
-                console.log(error);
-            }
-        );
+        user = await User.findByIdAndUpdate(req.user, req.body);
     } catch (err) {
-        console.log(err);
+        console.error(err);
         return res.status(500).json({
             message: "cannot save the updated user!",
         });
     }
 
-    return res.status(200).json(updatedUser);
+    return res.status(200).json(user);
 };

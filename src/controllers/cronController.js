@@ -527,8 +527,33 @@ const emergencyContact = async (occurrenceGroupId) => {
     }
     if (!sendMessage) return;
 
-    //@TODO: send the message to the emergency contact using the phone number
-    //provided in the user's settings
+    // The dotenv library makes it so we can pull the Twilio account credentials from process environment
+    // variables which are stored in a .env file that will be ignored by git. The file contains:
+    //      - account SID
+    //      - authentication token
+    //      - phone number from which messages are sent
+    // All variables were obtained from the Twilio account website www.twilio.com
+    dotenv.config();
+
+    if (user.hasEmergencyContact) {
+        const accountSID = process.env.TWILIO_ACCOUNT_SID;
+        const authToken = process.env.TWILIO_AUTH_TOKEN;
+        const fromNumber = process.env.TWILIO_PHONE_NUMBER;
+
+        //initializes twilio using credentials
+        const client = require('twilio')(accountSID, authToken);
+
+        // creates message with a body, sender number, and receiver number and sends it
+        client
+            .messages
+            .create(
+                {
+                    body: `Your contact ${user.firstName} ${user.lastName} missed his medication within the Med Manager 3.0 app, please advise them to take their medications or seek assistance`,
+                    from: fromNumber,
+                    to: user.emergencyContact.phoneNumber
+                })
+            .then(message => console.log(message.sid));
+    }
 
     //delete occurrenceGroup (we don't need to remove the reference from each of the occurrences)
     OccurrenceGroup.findByIdAndDelete(occurrenceGroup._id);
