@@ -633,7 +633,9 @@ export const getTrackingInfo = async (req, res) => {
 
         let now = new Date();
         //make sure occurrences are in range of the start and end date
-        let last12Hours = now.getTime() - 1000 * 3600 * 12;
+        //FOR TESTING PURPOSES USE CURRENT TIME INSTEAD OF LAST 12 HOURS
+        let last12Hours = now;
+        //let last12Hours = now.getTime() - 1000 * 3600 * 12;
         let last30Days = now.getTime() - 1000 * 3600 * 24 * 30;
         //array of medication objects that have an id, name, and compliance value
         //representing the amount of occurrences taken for that med within the
@@ -663,7 +665,7 @@ export const getTrackingInfo = async (req, res) => {
                 });
             }
         }
-        return res.send(200).json(trackingArr);
+        return res.status(200).json(trackingArr);
     } catch (err) {
         return res.status(404).json({
             message: "cannot find tracking information from user!",
