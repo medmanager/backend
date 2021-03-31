@@ -663,7 +663,7 @@ export const getTrackingInfo = async (req, res) => {
                 });
             }
         }
-        return res.send(200).json(trackingArr);
+        return res.status(200).json(trackingArr);
     } catch (err) {
         return res.status(404).json({
             message: "cannot find tracking information from user!",
