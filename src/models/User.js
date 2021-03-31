@@ -22,6 +22,8 @@ export const SettingsSchema = new Schema({
         name: {
             type: String,
         },
+        // phone numbers must be formatted as "+1*insert 10-digit phone number here*" in order to work 
+        // with twilio's messaging service
         phoneNumber: {
             type: String,
         },
