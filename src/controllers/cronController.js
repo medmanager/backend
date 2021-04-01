@@ -341,7 +341,7 @@ const sendNotification = async (occurrenceGroupId, userId) => {
     //we need an ID for the emergency contact job to differentiate
     //the emergency contact job from the occurrenceGroup job
     //NOTE: this code hasn't been tested
-    if (user.settings.hasEmergencyContact) {
+    if (user.settings.hasCaregiverContact) {
         let emergencyJobId = ObjectID();
         occurrenceGroup.emergencyJobId = emergencyJobId;
         let dateToFire = new Date();
@@ -360,7 +360,7 @@ const sendNotification = async (occurrenceGroupId, userId) => {
     //only delete if the user doesn't have emergency contacts enabled
     if (
         (!sendNotification || user.settings.notificationSettings.silenceAll) &&
-        !user.settings.hasEmergencyContact
+        !user.settings.hasCaregiverContact
     ) {
         OccurrenceGroup.deleteOne({ _id: occurrenceGroup._id });
         return;
@@ -513,6 +513,11 @@ const emergencyContact = async (occurrenceGroupId) => {
     ).populate({
         path: "occurrences",
         model: "Occurrence",
+        populate: {
+            path: "dosage",
+            model: "Dosage",
+            populate: { path: "medication", model: "Medication" },
+        },
     });
     //if occurrence group doesn't exist return
     if (occurrenceGroup == undefined) return;
@@ -520,12 +525,14 @@ const emergencyContact = async (occurrenceGroupId) => {
     //if user doesn't exist return
     if (user == undefined) return;
 
-    let sendMessage = false;
     //if one of the occurrences hasn't been taken yet, we want to send a message
+    let missedMeds = [];
     for (let occurrence of occurrenceGroup.occurrences) {
-        if (!occurrence.isTaken) sendMessage = true;
+        if (!occurrence.isTaken) {
+            missedMeds.push(occurrences);
+        }
     }
-    if (!sendMessage) return;
+    if (missedMeds.length == 0) return;
 
     // The dotenv library makes it so we can pull the Twilio account credentials from process environment
     // variables which are stored in a .env file that will be ignored by git. The file contains:
@@ -535,24 +542,47 @@ const emergencyContact = async (occurrenceGroupId) => {
     // All variables were obtained from the Twilio account website www.twilio.com
     dotenv.config();
 
-    if (user.hasEmergencyContact) {
+    if (user.hasCaregiverContact) {
         const accountSID = process.env.TWILIO_ACCOUNT_SID;
         const authToken = process.env.TWILIO_AUTH_TOKEN;
         const fromNumber = process.env.TWILIO_PHONE_NUMBER;
 
+        let message = `Hello ${user.caregiverContact.name}! Your contact, ${user.firstName} ${user.lastName}, did not take these medications: `;
+
+        for (let i = 0; i < missedMeds.length; i++) {
+            message +=
+                missedMeds[i].dosage.dose +
+                " " +
+                missedMeds[i].dosage.medication.amountUnit +
+                " of " +
+                missedMeds[i].dosage.medication.name +
+                " (" +
+                missedMeds[i].dosage.medication.strength +
+                " " +
+                missedMeds[i].dosage.medication.strengthUnit +
+                ")";
+
+            //include comma at the end of this if it's not the end
+            if (missedMeds.length == 2 && i == 0) {
+                message += " and ";
+            } else if (i == missedMeds.length - 2) {
+                message += ", and ";
+            } else if (missedMeds.length > 1 && i != missedMeds.length - 1) {
+                message += ", ";
+            }
+        }
+
         //initializes twilio using credentials
-        const client = require('twilio')(accountSID, authToken);
+        const client = require("twilio")(accountSID, authToken);
 
         // creates message with a body, sender number, and receiver number and sends it
-        client
-            .messages
-            .create(
-                {
-                    body: `Your contact ${user.firstName} ${user.lastName} missed his medication within the Med Manager 3.0 app, please advise them to take their medications or seek assistance`,
-                    from: fromNumber,
-                    to: user.emergencyContact.phoneNumber
-                })
-            .then(message => console.log(message.sid));
+        client.messages
+            .create({
+                body: message,
+                from: fromNumber,
+                to: user.caregiverContact.phoneNumber,
+            })
+            .then((message) => console.log(message.sid));
     }
 
     //delete occurrenceGroup (we don't need to remove the reference from each of the occurrences)

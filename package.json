@@ -18,7 +18,7 @@
   "homepage": "https://github.com/medmanager/backend#readme",
   "dependencies": {
     "apn": "^2.2.0",
-    "bcrypt": "^5.0.0",
+    "bcrypt": "^5.0.1",
     "body-parser": "^1.19.0",
     "braces": "^3.0.2",
     "dotenv": "^8.2.0",
@@ -26,9 +26,9 @@
     "firebase-admin": "^9.5.0",
     "fuse.js": "^6.4.6",
     "jsonwebtoken": "^8.5.1",
-    "lodash": "^4.17.20",
-    "mongodb": "^3.6.3",
-    "mongoose": "^5.11.13",
+    "lodash": "^4.17.21",
+    "mongodb": "^3.6.5",
+    "mongoose": "^5.12.2",
     "node-cron": "^2.0.3",
     "node-schedule": "^2.0.0",
     "twilio": "^3.59.0"
