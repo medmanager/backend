@@ -173,6 +173,14 @@ export const updateMedicationFromID = async (req, res) => {
         let d = req.body.dosages.find((dose) => dose._id == dosage);
         if (d != undefined) {
             existingDosages.push(dosage);
+            Dosage.findOneAndUpdate(
+                { _id: dosage },
+                {
+                    dose: dose.dose,
+                    sendReminder: dose.sendReminder,
+                    reminderTime: dose.reminderTime,
+                }
+            );
         } else {
             oldDosages.push(dosage);
         }
@@ -189,7 +197,7 @@ export const updateMedicationFromID = async (req, res) => {
         Dosage.insertMany(newDosages);
 
         let activeDosages = existingDosages.concat(
-            newDosages.map((d) => d._id)
+            newDosages.map((d) => (d = d._id))
         );
         //existingDosages need to be updated because it's possible they've changed
         //oldDosages need to be invalidated and the occurrences need to be descheduled
@@ -207,6 +215,13 @@ export const updateMedicationFromID = async (req, res) => {
         //update the medication with inactive and active dosages
         medication.inactiveDosages = oldDosages;
         medication.dosages = activeDosages;
+        medication.name = req.body.name;
+        medication.strength = req.body.strength;
+        medication.strengthUnit = req.body.strengthUnit;
+        medication.amount = req.body.amount;
+        medication.amountUnit = req.body.amountUnit;
+        medication.frequency = req.body.frequency;
+        medication.color = req.body.color;
         await medication.save();
 
         //finally schedule the future active dosages for the rest of week
@@ -271,6 +286,7 @@ export const deleteMedicationFromID = async (req, res) => {
             occurrencesToRemove.concat(occurrences);
         }
 
+        await occurrenceGroupsToRemove.populate("occurrences").execPopulate();
         //iterate over occurrenceGroups and delete groups that only have one occurrence
         for (let group of occurrenceGroupsToRemove) {
             if (group.occurrences.length == 1) {
@@ -287,16 +303,24 @@ export const deleteMedicationFromID = async (req, res) => {
                 });
             } else {
                 //TODO: FILTER OCCURRENCES TO BE REMOVED FROM GROUP AND DELETE GROUP IF NECESSARY
-                let occurrenceToRemove = { _id: 0 };
-                //if there are multiple occurrences,
-                //remove index of posted occurrence
-                let indexOfOccToRemove = group.occurrences.findIndex((occ) =>
-                    occ.equals(occurrenceToRemove._id)
-                );
-                if (indexOfOccToRemove != -1) {
-                    group.occurrences.splice(indexOfOccToRemove, 1);
+                for (let occurrence of occurrencesToRemove) {
+                    let indexOfOccToRemove = occurrenceGroup.occurrences.findIndex(
+                        (occ) => occ.equals(occurrence._id)
+                    );
+                    if (indexOfOccToRemove != -1) {
+                        occurrenceGroup.occurrences.splice(
+                            indexOfOccToRemove,
+                            1
+                        );
+                    }
                 }
-                await group.save();
+                //if the occurrence group no longer has any meds just delete it
+                //otherwise save the new group
+                if (group.occurrences.length > 0) {
+                    await OccurrenceGroup.deleteOne({ _id: group._id });
+                } else {
+                    await group.save();
+                }
             }
         }
 
@@ -312,7 +336,9 @@ export const deleteMedicationFromID = async (req, res) => {
         await Medication.deleteOne({ _id: medicationToRemove._id });
         //find the user and delete the medication reference
         let user = await User.findById(medicationToRemove.user);
-        let index = user.medications.indexOf(medicationToRemove._id);
+        let index = user.medications.findIndex((med) =>
+            med.equals(medicationToRemove._id)
+        );
         if (index != -1) {
             user.medications.splice(index, 1);
         }
@@ -790,28 +816,67 @@ const getWeeklyOccurrences = (user) => {
  * Given an array of dosageIds, deschedule all future occurrences that
  * correspond to the given dosageIds,
  */
-const descheduleAndDeleteFutureOccurrences = (dosages) => {
-    dosages.forEach(async (dosageId) => {
+const descheduleAndDeleteFutureOccurrences = async (dosages) => {
+    for (let dosageId of dosages) {
         //first get the dosage and populate the occurrences
         let dosage = await Dosage.findById(dosageId);
-        await dosage.populate("occurrences").execPopulate();
+        await dosage.populate("occurrences").execPopulate;
         //we only want to remove occurrences that haven't happened yet
+        //and haven't been taken yet
         let now = new Date();
         let occurrencesToRemove = dosage.occurrences.filter(
             (occ) => !occ.isTaken && occ.scheduledDate.getTime() > now.getTime()
         );
-        //deschedule the occurrences
-        //TODO: FIX
-        // occurrencesToRemove.forEach((occurrence) => {
-        //     let key = occurrence._id.toString();
-        //     if (key in schedule.scheduledJobs) {
-        //         const job = schedule.scheduledJobs[key];
-        //         if (job != null && job != undefined) {
-        //             job.cancel();
-        //         }
-        //     }
-        // });
-        //delete the occurrences
+
+        let occurrenceGroupsToRemove = [];
+        for (let occurrence of occurrencesToRemove) {
+            if (occurrenceGroupsToRemove.indexOf(occurrence.group) == -1) {
+                occurrenceGroupsToRemove.push(occurrence.group);
+            }
+        }
+
+        occurrenceGroupsToRemove = OccurrenceGroup.find({
+            _id: { $in: occurrenceGroupsToRemove },
+        });
+        await occurrenceGroupsToRemove.populate("occurrences").execPopulate();
+
+        //iterate over occurrenceGroups and delete groups that only have one occurrence
+        for (let group of occurrenceGroupsToRemove) {
+            if (group.occurrences.length == 1) {
+                const key = group._id.toString();
+                //if job exists, then cancel it!
+                if (key in schedule.scheduledJobs) {
+                    const job = schedule.scheduledJobs[key];
+                    if (job != undefined) {
+                        job.cancel();
+                    }
+                }
+                await OccurrenceGroup.deleteOne({
+                    _id: group._id,
+                });
+            } else {
+                //TODO: FILTER OCCURRENCES TO BE REMOVED FROM GROUP AND DELETE GROUP IF NECESSARY
+                for (let occurrence of occurrencesToRemove) {
+                    let indexOfOccToRemove = occurrenceGroup.occurrences.findIndex(
+                        (occ) => occ.equals(occurrence._id)
+                    );
+                    if (indexOfOccToRemove != -1) {
+                        occurrenceGroup.occurrences.splice(
+                            indexOfOccToRemove,
+                            1
+                        );
+                    }
+                }
+                //if the occurrence group no longer has any meds just delete it
+                //otherwise save the new group
+                if (group.occurrences.length > 0) {
+                    await OccurrenceGroup.deleteOne({ _id: group._id });
+                } else {
+                    await group.save();
+                }
+            }
+        }
+
         await Occurrence.deleteMany(occurrencesToRemove, (err) => {
             if (err) console.log("error deleting occurrences");
         });
@@ -820,5 +885,5 @@ const descheduleAndDeleteFutureOccurrences = (dosages) => {
             !occurrencesToRemove.includes(occ);
         });
         await dosage.save();
-    });
+    }
 };
