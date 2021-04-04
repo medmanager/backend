@@ -136,6 +136,78 @@ export const getMedicationFromID = async (req, res) => {
     return res.json(medication);
 };
 
+export const activateMedication = async (req, res) => {
+    if (req.user == null) {
+        return res
+            .status(400)
+            .json({ message: "token error: cannot find user from token" });
+    }
+    const medId = req.params.medicationID;
+    if (!medId) {
+        return res.status(400).send({ message: "Medication id is required" });
+    }
+    let medication;
+    try {
+        medication = await Medication.findById(medId);
+
+        if (!medication) {
+            return res.status(404).json({ message: "Medication not found" });
+        }
+
+        //ensure that the medication id matches the same user that sent the request
+        if (!medication.user.equals(req.user))
+            return res.status(401).json({
+                message: "You are not authorized to view this medication",
+            });
+    } catch (err) {
+        return res.send(err);
+    }
+    if (medication.active) return res.status(200).json(medication);
+    //reschedule occurrences for the week and mark as active
+    await Medication.findOneAndUpdate(
+        { _id: medication._id },
+        { active: true }
+    );
+    scheduleMedication(medication);
+};
+
+export const deactivateMedication = async (req, res) => {
+    if (req.user == null) {
+        return res
+            .status(400)
+            .json({ message: "token error: cannot find user from token" });
+    }
+    const medId = req.params.medicationID;
+    if (!medId) {
+        return res.status(400).send({ message: "Medication id is required" });
+    }
+    let medication;
+    try {
+        medication = await Medication.findById(medId);
+
+        if (!medication) {
+            return res.status(404).json({ message: "Medication not found" });
+        }
+
+        //ensure that the medication id matches the same user that sent the request
+        if (!medication.user.equals(req.user))
+            return res.status(401).json({
+                message: "You are not authorized to view this medication",
+            });
+    } catch (err) {
+        return res.send(err);
+    }
+    //if medication is already inactive
+    if (!medication.active) return res.status(200).json(medication);
+    //mark medication as inactive
+    await Medication.findOneAndUpdate(
+        { _id: medication._id },
+        { active: true }
+    );
+    descheduleAndDeleteFutureOccurrences(medication.dosages);
+    return res.status(200).json(medication);
+};
+
 export const updateMedicationFromID = async (req, res) => {
     if (req.user == null) {
         return res.status(400).json({
@@ -650,7 +722,8 @@ export const getTrackingInfo = async (req, res) => {
                 path: "medications",
                 model: "Medication",
                 populate: {
-                    path: "dosages",
+                    //not 100% percent sure if this syntax works
+                    path: "dosages inactiveDosages",
                     model: "Dosage",
                     populate: { path: "occurrences", model: "Occurrence" },
                 },
@@ -669,7 +742,7 @@ export const getTrackingInfo = async (req, res) => {
         for (let med of user.medications) {
             let takenOccurrences = 0;
             let totalOccurrences = 0;
-            for (let dosage of med.dosages) {
+            for (let dosage of med.dosages.concat(med.inactiveDosages)) {
                 for (let occurrence of dosage.occurrences) {
                     if (
                         occurrence.scheduledDate.getTime() > last30Days &&
@@ -820,7 +893,7 @@ const descheduleAndDeleteFutureOccurrences = async (dosages) => {
     for (let dosageId of dosages) {
         //first get the dosage and populate the occurrences
         let dosage = await Dosage.findById(dosageId);
-        await dosage.populate("occurrences").execPopulate;
+        await dosage.populate("occurrences").execPopulate();
         //we only want to remove occurrences that haven't happened yet
         //and haven't been taken yet
         let now = new Date();

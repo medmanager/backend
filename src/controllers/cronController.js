@@ -774,7 +774,8 @@ const getScheduledDays = (user) => {
         scheduledDays.push([]);
     }
     if (user.medications == null) return scheduledDays;
-    user.medications.forEach((med) => {
+    for (let med of user.medications) {
+        if (!med.active) continue;
         let start = med.dateAdded;
         //get number of milliseconds between start date and end date
         let daysbetween = endDate.getTime() - start.getTime();
@@ -879,7 +880,7 @@ const getScheduledDays = (user) => {
                 }
             }
         }
-    });
+    }
     //eaving prints for testing purposes
     // let i = 0;
     // scheduledDays.forEach(day => {
@@ -908,7 +909,8 @@ const sortOccurrencesByTime = (user) => {
         sortedOccurrences.push([]);
     }
     let now = new Date();
-    user.medications.forEach((med) => {
+    for (let med of user.medications) {
+        if (!med.active) continue;
         med.dosages.forEach((dosage) => {
             dosage.occurrences.forEach((occurrence) => {
                 if (occurrence.scheduledDate.getTime() > now.getTime()) {
@@ -919,7 +921,7 @@ const sortOccurrencesByTime = (user) => {
                 }
             });
         });
-    });
+    }
 
     //sort the occurrences by time
     sortedOccurrences.forEach((day) => {

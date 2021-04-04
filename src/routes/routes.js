@@ -1,4 +1,6 @@
 import {
+    activateMedication,
+    deactivateMedication,
     addNewMedication,
     deleteMedicationFromID,
     fuzzySearchWithString,
@@ -33,6 +35,16 @@ const routes = (app) => {
         .get(loginRequired, getMedicationFromID)
         .put(loginRequired, updateMedicationFromID)
         .delete(loginRequired, deleteMedicationFromID);
+
+    app.route("/medication/deactivate/:medicationID").put(
+        loginRequired,
+        deactivateMedication
+    );
+
+    app.route("/medication/active/:medicationID").put(
+        loginRequired,
+        activateMedication
+    );
 
     app.route("/dosage").get(loginRequired, getDosages);
 
