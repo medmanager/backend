@@ -2,6 +2,7 @@ import apn from "apn";
 import firebase from "firebase-admin";
 import mongoose from "mongoose";
 import schedule from "node-schedule";
+import dotenv from "dotenv";
 import path from "path";
 import { DosageSchema } from "../models/Dosage";
 import { MedicationSchema } from "../models/Medication";
@@ -270,7 +271,7 @@ export const scheduleWeeklyOccurrences = async (userId) => {
             await occurrenceGroup.save();
         }
     }
-    User.findOneAndUpdate({ _id: user._id }, { lastScheduled: now });
+    await User.findOneAndUpdate({ _id: user._id }, { lastScheduled: now });
 };
 
 /**
@@ -342,10 +343,11 @@ const sendNotification = async (occurrenceGroupId, userId) => {
     //the emergency contact job from the occurrenceGroup job
     //NOTE: this code hasn't been tested
     if (user.settings.hasCaregiverContact) {
-        let emergencyJobId = ObjectID();
+        console.log("we have caregiver contact");
+        let emergencyJobId = mongoose.Types.ObjectId();
         occurrenceGroup.emergencyJobId = emergencyJobId;
         let dateToFire = new Date();
-        let waitingTime = 1000 * 3600 * 12;
+        let waitingTime = 1000 * 60;
         dateToFire = new Date(dateToFire.getTime() + waitingTime);
         schedule.scheduleJob(
             emergencyJobId.toString(),
@@ -529,7 +531,7 @@ const emergencyContact = async (occurrenceGroupId) => {
     let missedMeds = [];
     for (let occurrence of occurrenceGroup.occurrences) {
         if (!occurrence.isTaken) {
-            missedMeds.push(occurrences);
+            missedMeds.push(occurrence);
         }
     }
     if (missedMeds.length == 0) return;
@@ -542,12 +544,13 @@ const emergencyContact = async (occurrenceGroupId) => {
     // All variables were obtained from the Twilio account website www.twilio.com
     dotenv.config();
 
-    if (user.hasCaregiverContact) {
+    if (user.settings.hasCaregiverContact) {
+        console.log("we get here!");
         const accountSID = process.env.TWILIO_ACCOUNT_SID;
         const authToken = process.env.TWILIO_AUTH_TOKEN;
         const fromNumber = process.env.TWILIO_PHONE_NUMBER;
 
-        let message = `Hello ${user.caregiverContact.name}! Your contact, ${user.firstName} ${user.lastName}, did not take these medications: `;
+        let message = `Hello ${user.settings.caregiverContact.name}! Your contact, ${user.firstName} ${user.lastName}, did not take these medications: `;
 
         for (let i = 0; i < missedMeds.length; i++) {
             message +=
@@ -572,15 +575,19 @@ const emergencyContact = async (occurrenceGroupId) => {
             }
         }
 
+        console.log(message);
+        console.log("+1" + user.settings.caregiverContact.phoneNumber);
         //initializes twilio using credentials
         const client = require("twilio")(accountSID, authToken);
+
+        console.log(client);
 
         // creates message with a body, sender number, and receiver number and sends it
         client.messages
             .create({
                 body: message,
                 from: fromNumber,
-                to: user.caregiverContact.phoneNumber,
+                to: "+1" + user.settings.caregiverContact.phoneNumber,
             })
             .then((message) => console.log(message.sid));
     }

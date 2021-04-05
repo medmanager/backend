@@ -41,7 +41,7 @@ const routes = (app) => {
         deactivateMedication
     );
 
-    app.route("/medication/active/:medicationID").put(
+    app.route("/medication/activate/:medicationID").put(
         loginRequired,
         activateMedication
     );
