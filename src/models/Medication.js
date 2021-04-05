@@ -8,7 +8,7 @@ export const MedicationSchema = new Schema({
         type: String,
         required: "Medication name is required",
     },
-    notes: String,
+    condition: String,
     strength: {
         type: Number,
         required: true,
