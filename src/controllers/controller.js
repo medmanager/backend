@@ -285,7 +285,9 @@ export const updateMedicationFromID = async (req, res) => {
         });
 
         //update the medication with inactive and active dosages
-        medication.inactiveDosages = oldDosages;
+        medication.inactiveDosages = medication.inactiveDosages.concat(
+            oldDosages
+        );
         medication.dosages = activeDosages;
         medication.name = req.body.name;
         medication.strength = req.body.strength;
