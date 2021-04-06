@@ -1,8 +1,9 @@
 import apn from "apn";
+import startOfWeek from "date-fns/startOfWeek";
+import dotenv from "dotenv";
 import firebase from "firebase-admin";
 import mongoose from "mongoose";
 import schedule from "node-schedule";
-import dotenv from "dotenv";
 import path from "path";
 import { DosageSchema } from "../models/Dosage";
 import { MedicationSchema } from "../models/Medication";
@@ -153,48 +154,44 @@ export const scheduleMedication = async (medication, userId) => {
  * Must create an occurrence entry array for each dosage
  */
 export const scheduleWeeklyOccurrences = async (userId) => {
+    console.log("schedule weekly occurrences");
     let user = await User.findById(userId, (err) => {
         if (err) {
             console.log("cannot find user!");
             return;
         }
     });
-    await deleteOccurrenceGroups(user);
-    let now = new Date();
+    let date = new Date();
     //check is the user has already been scheduled this week
     //if so, we don't want to add any more occurrences since they will be duplicates
-    let lastSunday = new Date();
-    lastSunday.setHours(0, 0, 0, 0);
-    lastSunday = lastSunday.getTime() - lastSunday.getDay() * 1000 * 3600 * 24;
-    if (user.lastScheduled.getTime() < lastSunday) {
-        await user
-            .populate({
-                path: "medications",
-                populate: { path: "dosages", model: "Dosage" },
-            })
-            .execPopulate();
-        let occurrences = getScheduledDays(user);
-        for (let day of occurrences) {
-            for (let med of day) {
-                //we found the right med
-                for (let dose of med.datesWTime) {
-                    //ensure that the occurrence hasn't already passed
-                    if (now.getTime() < dose.date.getTime()) {
-                        //create occurrence
-                        let occurrence = {
-                            isTaken: false,
-                            timeTaken: null,
-                            scheduledDate: dose.date,
-                            dosage: dose.dosageId,
-                        };
-                        let uDose = await Dosage.findOne({
-                            _id: dose.dosageId,
-                        });
-                        occurrence = new Occurrence(occurrence);
-                        await occurrence.save();
-                        uDose.occurrences.push(occurrence);
-                        await uDose.save();
-                    }
+    const lastSunday = startOfWeek(date);
+    await user
+        .populate({
+            path: "medications",
+            populate: { path: "dosages", model: "Dosage" },
+        })
+        .execPopulate();
+    let occurrences = getScheduledDays(user);
+    for (let day of occurrences) {
+        for (let med of day) {
+            //we found the right med
+            for (let dose of med.datesWTime) {
+                //ensure that the occurrence hasn't already passed
+                if (date.getTime() < dose.date.getTime()) {
+                    //create occurrence
+                    let occurrence = {
+                        isTaken: false,
+                        timeTaken: null,
+                        scheduledDate: dose.date,
+                        dosage: dose.dosageId,
+                    };
+                    let uDose = await Dosage.findOne({
+                        _id: dose.dosageId,
+                    });
+                    occurrence = new Occurrence(occurrence);
+                    await occurrence.save();
+                    uDose.occurrences.push(occurrence);
+                    await uDose.save();
                 }
             }
         }
@@ -213,7 +210,7 @@ export const scheduleWeeklyOccurrences = async (userId) => {
     let sortedOccurrences = sortOccurrencesByTime(user);
     for (let dayIndex = 0; dayIndex < sortedOccurrences.length; dayIndex++) {
         //skip over previous days of the week
-        if (dayIndex < now.getDay()) {
+        if (dayIndex < date.getDay()) {
             continue;
         }
         let day = sortedOccurrences[dayIndex];
@@ -222,7 +219,7 @@ export const scheduleWeeklyOccurrences = async (userId) => {
             //if scheduledDate has already passed don't do anything
             //if occurrence has already been taken don't schedule it
             if (
-                day[i].scheduledDate.getTime() < now.getTime() ||
+                day[i].scheduledDate.getTime() < date.getTime() ||
                 day[i].isTaken
             )
                 continue;
@@ -265,13 +262,12 @@ export const scheduleWeeklyOccurrences = async (userId) => {
                 occurrenceGroup._id.toString(),
                 occurrenceGroup.scheduledDate,
                 function () {
-                    sendNotification(occurrenceGroup._id, userId);
+                    sendNotification(occurrenceGroup._id);
                 }
             );
             await occurrenceGroup.save();
         }
     }
-    await User.findOneAndUpdate({ _id: user._id }, { lastScheduled: now });
 };
 
 /**
@@ -289,18 +285,13 @@ export const scheduleWeeklyOccurrences = async (userId) => {
  * If occurrenceGroup contains the emergency contact job id, this can be used to
  * check whether the key exists in schedule.scheduledJobs
  */
-const deleteOccurrenceGroups = async (user) => {
-    let occurrenceGroups = await OccurrenceGroup.find({ user: user._id });
-    occurrenceGroups.map((oG) => (oG = oG._id));
-    await OccurrenceGroup.deleteMany(
-        { _id: { $in: occurrenceGroups } },
-        (err) => {
-            if (err) {
-                console.log("cannot delete occurrenceGroups");
-            }
-        }
-    );
-};
+// const deletePastOccurrenceGroups = async () => {
+//     await OccurrenceGroup.deleteMany({
+//         scheduledDate: {
+//             $lte: new Date(),
+//         },
+//     });
+// };
 
 const Platform = {
     iOS: "ios",
@@ -315,7 +306,7 @@ const Platform = {
  * @param {String} occurrenceId Occurrence id
  * @param {String} userId User id
  */
-const sendNotification = async (occurrenceGroupId, userId) => {
+export const sendNotification = async (occurrenceGroupId) => {
     let occurrenceGroup = await OccurrenceGroup.findById(
         occurrenceGroupId
     ).populate({
@@ -327,7 +318,7 @@ const sendNotification = async (occurrenceGroupId, userId) => {
             populate: { path: "medication", model: "Medication" },
         },
     });
-    let user = await User.findById(userId);
+    let user = await User.findById(occurrenceGroup.user);
     //check that at least one of the occurrences belongs to a dosage that has sendReminder as true
     let sendNotification = false;
     for (let occurrence of occurrenceGroup.occurrences) {
@@ -766,7 +757,7 @@ const getScheduledMedicationDays = (med) => {
  * that has the specific DateTime the medication needs to be taken. It also has the
  * dosageId.
  */
-const getScheduledDays = (user) => {
+export const getScheduledDays = (user) => {
     let week = startAndEndDateDefault();
     let startDate = week.startDate;
     let endDate = week.endDate;
@@ -909,7 +900,7 @@ const getScheduledDays = (user) => {
  * @param user populated user
  * @return sortedOccurrences array of seven days with occurrences on each day
  */
-const sortOccurrencesByTime = (user) => {
+export const sortOccurrencesByTime = (user) => {
     //create weekly array starting on sunday and ending on sat
     let sortedOccurrences = [];
     for (let i = 0; i < 7; i++) {

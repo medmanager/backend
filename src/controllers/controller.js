@@ -6,6 +6,7 @@ import { MedicationSchema } from "../models/Medication";
 import { OccurrenceGroupSchema, OccurrenceSchema } from "../models/Occurrence";
 import { UserSchema } from "../models/User";
 import { scheduleMedication } from "./cronController";
+import { getWeeklyOccurrences } from "./occurrenceController";
 
 const User = mongoose.model("User", UserSchema);
 const Medication = mongoose.model("Medication", MedicationSchema);
@@ -679,12 +680,9 @@ export const takeDosageOccurrence = async (req, res) => {
                 }
 
                 // decrement the amount of capsules, tablets, etc. remaining
-                await Medication.findOneAndUpdate(
-                    { _id: medication._id },
-                    {
-                        $inc: { amount: -1 },
-                    }
-                );
+                await Medication.findByIdAndUpdate(medication._id, {
+                    $inc: { amount: -1 },
+                });
                 return res.status(200).json(occurrenceToUpdate);
             }
         }
@@ -704,10 +702,7 @@ export const registerDeviceKey = async (req, res) => {
             .status(400)
             .json({ message: "missing token/deviceType data!" });
     }
-    await User.findOneAndUpdate(
-        { _id: req.user },
-        { deviceInfo: { token, os } }
-    );
+    await User.findByIdAndUpdate(req.user, { deviceInfo: { token, os } });
     return res.status(200).json({ ok: true });
 };
 
@@ -816,78 +811,6 @@ export const getOccurrenceGroupFromID = async (req, res) => {
 };
 
 /**
- * Helper function for getOccurrences that uses the occurrences already stored
- * in the database to send. Formats them into an array of days containing an array of
- * occurrences where each occurrence has a medicationId, dosageId, and occurrence (from DosageModel)
- *
- * Right now the function is not dynamic and only gives occurrences for the current week
- *
- * When we start tracking occurrences from previous weeks, we can easily change the startDate
- * and endDate to parameters so that this function can be used to generate easily parsable
- * tracking data.
- */
-const getWeeklyOccurrences = (user) => {
-    let startDate = new Date();
-    let dayS = startDate.getDay();
-    //sunday is index 0 so subtract current day in millis
-    startDate = new Date(startDate.getTime() - dayS * 24 * 3600 * 1000);
-
-    let endDate = new Date();
-    let dayE = endDate.getDay();
-    //add remaining days in the week in millis
-    endDate = new Date(endDate.getTime() + (6 - dayE) * 24 * 3600 * 1000);
-
-    //set to end of day
-    startDate.setHours(23, 59, 59, 999);
-    endDate.setHours(23, 59, 59, 999);
-
-    //get number of milliseconds between start date and end date
-    let days = endDate.getTime() - startDate.getTime();
-    //divide by number of milliseconds in one day and ceil
-    days = Math.ceil(days / (1000 * 3600 * 24));
-    //create entries in scheduledDays array for each day inbetween
-    let scheduledDays = [];
-    for (let x = 0; x <= days; x++) {
-        scheduledDays.push([]);
-    }
-
-    user.medications.forEach((med) => {
-        med.dosages.forEach((dose) => {
-            dose.occurrences.forEach((occurrence) => {
-                let dayIndex = 0;
-                scheduledDays.forEach((day) => {
-                    //only add occurrence to day if the occurrence is in the timeframe and
-                    //between start and end date
-                    if (
-                        occurrence.scheduledDate.getTime() >
-                            startDate.getTime() &&
-                        occurrence.scheduledDate.getTime() <
-                            endDate.getTime() &&
-                        occurrence.scheduledDate.getDay() == dayIndex
-                    ) {
-                        day.push({
-                            medicationId: med._id,
-                            dosageId: dose._id,
-                            occurrence: occurrence,
-                        });
-                    }
-                    dayIndex++;
-                });
-            });
-        });
-    });
-    //sort each day by date
-    scheduledDays.forEach((day) => {
-        day.sort(
-            (a, b) =>
-                a.occurrence.scheduledDate.getTime() -
-                b.occurrence.scheduledDate.getTime()
-        );
-    });
-    return scheduledDays;
-};
-
-/**
  * Given an array of dosageIds, deschedule all future occurrences that
  * correspond to the given dosageIds,
  */
@@ -910,7 +833,7 @@ const descheduleAndDeleteFutureOccurrences = async (dosages) => {
             }
         }
 
-        occurrenceGroupsToRemove = OccurrenceGroup.find({
+        occurrenceGroupsToRemove = await OccurrenceGroup.find({
             _id: { $in: occurrenceGroupsToRemove },
         });
         await occurrenceGroupsToRemove.populate("occurrences").execPopulate();

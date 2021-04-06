@@ -66,10 +66,6 @@ export const UserSchema = new Schema({
             type: String,
         },
     },
-    lastScheduled: {
-        type: Date,
-        default: Date.now,
-    },
     settings: {
         type: SettingsSchema,
     },
