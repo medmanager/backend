@@ -882,8 +882,6 @@ const descheduleAndDeleteFutureOccurrences = async (dosages) => {
             }
         }
 
-        console.log(occurrencesToRemove);
-
         await Occurrence.deleteMany(
             { _id: { $in: occurrencesToRemove } },
             (err) => {
@@ -895,6 +893,6 @@ const descheduleAndDeleteFutureOccurrences = async (dosages) => {
             -1 != occurrencesToRemove.findIndex((occu) => occu._id == occ._id);
         });
 
-        await dosage.update();
+        await Dosage.updateOne({ _id: dosage._id }, dosage);
     }
 };
