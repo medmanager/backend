@@ -147,6 +147,139 @@ export const scheduleMedication = async (medication, userId) => {
     }
 };
 
+export const scheduleDosages = async (medication, dosages, userId) => {
+    let scheduledDays = getScheduledMedicationDays(medication);
+    //DO NOT USE .forEach because it won't loop asynchronously
+    for (let day of scheduledDays) {
+        for (let dosageOccurrence of day) {
+            //need to ensure only schedule occurrences for dosagesIds on medication
+            for (let dose of dosageOccurrence.datesWTime) {
+                let index = dosages.findIndex((dosage) =>
+                    dosage._id.equals(dose.dosageId)
+                );
+                if (index == -1) continue;
+                let now = new Date();
+                if (now.getTime() < dose.date.getTime()) {
+                    //create occurrence
+                    let occurrence = {
+                        isTaken: false,
+                        timeTaken: null,
+                        scheduledDate: dose.date,
+                        dosage: dose.dosageId,
+                    };
+                    //not sure if we can use findOneAndUpdate here
+                    //since we need to be able to add occurrence to the queue
+                    let uDose = await Dosage.findOne({ _id: dose.dosageId });
+                    occurrence = new Occurrence(occurrence);
+                    await occurrence.save();
+                    uDose.occurrences.push(occurrence._id);
+                    await uDose.save();
+                }
+            }
+        }
+    }
+    await medication
+        .populate({
+            path: "dosages",
+            model: "Dosage",
+            populate: { path: "occurrences", model: "Occurrence" },
+        })
+        .execPopulate();
+    //find all occurrenceGroups that belong to the user
+    let occurrenceGroups = await OccurrenceGroup.find({ user: userId });
+    let sortedOccurrences = sortOccurrencesByTimeMed(medication);
+    let now = new Date();
+    for (let dayIndex = 0; dayIndex < sortedOccurrences.length; dayIndex++) {
+        //skip over previous days of the week
+        if (dayIndex < now.getDay()) {
+            continue;
+        }
+        let day = sortedOccurrences[dayIndex];
+        //iterate over each day and group together occurrences that happen in the same minute
+        for (let i = 0; i < day.length; i++) {
+            //if scheduledDate has already passed don't do anything
+            if (day[i].scheduledDate.getTime() < now.getTime()) continue;
+            let index = dosages.findIndex((dosage) =>
+                dosage._id.equals(day[i].dosage)
+            );
+            if (index == -1) continue;
+
+            //CHECK IF THERE IS AN EXISTING OCCURRENCE GROUP AT THIS TIME
+            let indexOfOccGroup = occurrenceGroups.findIndex(
+                (occGroup) =>
+                    occGroup.scheduledDate.getDay() ==
+                        day[i].scheduledDate.getDay() &&
+                    occGroup.scheduledDate.getHours() ==
+                        day[i].scheduledDate.getHours() &&
+                    occGroup.scheduledDate.getMinutes() ==
+                        day[i].scheduledDate.getMinutes()
+            );
+            //if there is an existing group, merge new occurrences into group
+            let occurrenceGroup;
+            let oldGroup = false;
+            if (indexOfOccGroup != -1) {
+                oldGroup = true;
+                occurrenceGroup = occurrenceGroups[indexOfOccGroup];
+            } else {
+                occurrenceGroup = new OccurrenceGroup();
+            }
+            let assembleGroup = [];
+            assembleGroup.push(day[i]);
+            await Occurrence.findOneAndUpdate(
+                { _id: day[i]._id },
+                { group: occurrenceGroup._id }
+            );
+            let occurrenceTime =
+                day[i].scheduledDate.getHours() +
+                day[i].scheduledDate.getMinutes();
+            let j = i + 1;
+            for (; j < day.length; j++) {
+                let nOccurrenceTime =
+                    day[j].scheduledDate.getHours() +
+                    day[j].scheduledDate.getMinutes();
+                if (occurrenceTime == nOccurrenceTime) {
+                    assembleGroup.push(day[j]);
+                    await Occurrence.findOneAndUpdate(
+                        { _id: day[j]._id },
+                        { group: occurrenceGroup._id }
+                    );
+                } else if (occurrenceTime < nOccurrenceTime) {
+                    break;
+                }
+            }
+            i = j - 1;
+            occurrenceGroup.occurrences = occurrenceGroup.occurrences.concat(
+                assembleGroup
+            );
+            occurrenceGroup.user = userId;
+            //set scheduleDate equal to the first occurrence in assembleGroup
+            //assembleGroup should always have at least one occurrence in it
+            occurrenceGroup.scheduledDate = new Date(
+                assembleGroup[0].scheduledDate.getTime()
+            );
+            //save occurrence group
+            if (oldGroup) {
+                //if we're using an existing group, just update with
+                //the new number of occurrences
+                await OccurrenceGroup.findOneAndUpdate(
+                    { _id: occurrenceGroup._id },
+                    { occurrences: occurrenceGroup.occurrences }
+                );
+            } else {
+                await occurrenceGroup.save();
+                //schedule job if it's a new group
+                schedule.scheduleJob(
+                    occurrenceGroup._id.toString(),
+                    occurrenceGroup.scheduledDate,
+                    async () => {
+                        await sendNotification(occurrenceGroup._id, userId);
+                    }
+                );
+            }
+        }
+    }
+};
+
 /**
  * function to schedule weekly dosage occurrences for the week
  * Must create an occurrence entry array for each dosage

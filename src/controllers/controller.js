@@ -6,7 +6,7 @@ import { DosageSchema } from "../models/Dosage";
 import { MedicationSchema } from "../models/Medication";
 import { OccurrenceGroupSchema, OccurrenceSchema } from "../models/Occurrence";
 import { UserSchema } from "../models/User";
-import { scheduleMedication } from "./cronController";
+import { scheduleMedication, scheduleDosages } from "./cronController";
 import { getWeeklyOccurrences } from "./occurrenceController";
 
 const User = mongoose.model("User", UserSchema);
@@ -309,22 +309,21 @@ export const updateMedicationFromID = async (req, res) => {
         await Dosage.insertMany(newDosages);
     }
 
-    let medIdsToInvalidate = changedDosages.map((dosage) => dosage._id);
-    medIdsToInvalidate = medIdsToInvalidate.concat(
-        oldDosages.map((dosage) => dosage._id)
-    );
+    let dosageIdsToInvalidate = changedDosages;
+    dosageIdsToInvalidate = dosageIdsToInvalidate.concat(oldDosages);
 
     if (_.isEqual(medication.frequency, updatedMed.frequency)) {
-        medIdsToInvalidate = medIdsToInvalidate.concat(
-            unchangedDosages.map((dosage) => dosage._id)
-        );
+        dosageIdsToInvalidate = dosageIdsToInvalidate.concat(unchangedDosages);
     }
 
-    descheduleAndDeleteFutureOccurrences(medIdsToInvalidate);
+    descheduleAndDeleteFutureOccurrences(
+        dosageIdsToInvalidate.map((dosage) => dosage._id)
+    );
 
-    let activeDosageIds = unchangedDosages;
-    activeDosageIds = activeDosageIds.concat(changedDosages);
+    let activeDosageIds = changedDosages;
     activeDosageIds = activeDosageIds.concat(newDosages);
+    let dosagesToSchedule = activeDosageIds;
+    activeDosageIds = activeDosageIds.concat(unchangedDosages);
 
     if (medication.inactiveDosages == null) {
         medication.inactiveDosages = oldDosages;
@@ -347,7 +346,7 @@ export const updateMedicationFromID = async (req, res) => {
 
     await medication.populate("dosages").execPopulate();
     console.log(medication);
-    await scheduleMedication(medication);
+    await scheduleDosages(medication, dosagesToSchedule, medication.user);
     return res.status(200).json(medication);
 };
 
