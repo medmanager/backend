@@ -260,14 +260,20 @@ export const updateMedicationFromID = async (req, res) => {
             }
         }
         if (!added) {
-            newDosage._id = null;
+            if ("_id" in newDosage) {
+                delete newDosage._id;
+            }
             newDosages.push(newDosage);
         }
     }
 
     for (let dosage of medication.dosages) {
-        let index1 = changedDosages.findIndex((d) => d._id == dosage._id);
-        let index2 = unchangedDosages.findIndex((d) => d._id == dosage._id);
+        let index1 = changedDosages.findIndex(
+            (d) => d._id == dosage._id.toString()
+        );
+        let index2 = unchangedDosages.findIndex(
+            (d) => d._id == dosage._id.toString()
+        );
         if (index1 == -1 && index2 == -1) {
             oldDosages.push(dosage);
         }
@@ -291,10 +297,13 @@ export const updateMedicationFromID = async (req, res) => {
 
     newDosages = newDosages.map((dosage) => {
         dosage = new Dosage(dosage);
-        console.log(dosage);
         dosage.medication = medication._id;
         return dosage;
     });
+    console.log({ newDosages });
+    console.log({ unchangedDosages });
+    console.log({ changedDosages });
+    console.log({ oldDosages });
 
     if (newDosages.length > 0) {
         await Dosage.insertMany(newDosages);
@@ -313,21 +322,18 @@ export const updateMedicationFromID = async (req, res) => {
 
     descheduleAndDeleteFutureOccurrences(medIdsToInvalidate);
 
-    let activeDosageIds = unchangedDosages.map((dosage) => dosage._id);
-    activeDosageIds = activeDosageIds.concat(
-        changedDosages.map((dosage) => dosage._id)
-    );
-    activeDosageIds = activeDosageIds.concat(
-        newDosages.map((dosage) => dosage._id)
-    );
+    let activeDosageIds = unchangedDosages;
+    activeDosageIds = activeDosageIds.concat(changedDosages);
+    activeDosageIds = activeDosageIds.concat(newDosages);
 
     if (medication.inactiveDosages == null) {
-        medication.inactiveDosages = oldDosages.map((dosage) => dosage._id);
+        medication.inactiveDosages = oldDosages;
     } else {
         medication.inactiveDosages = medication.inactiveDosages.concat(
-            oldDosages.map((dosage) => dosage._id)
+            oldDosages
         );
     }
+    console.log({ activeDosageIds });
 
     medication.dosages = activeDosageIds;
     medication.name = updatedMed.name;
@@ -340,13 +346,14 @@ export const updateMedicationFromID = async (req, res) => {
     await Medication.updateOne({ _id: medication.id }, medication);
 
     await medication.populate("dosages").execPopulate();
+    console.log(medication);
     await scheduleMedication(medication);
     return res.status(200).json(medication);
 };
 
 const isEqualDosage = (existingD, newD) => {
     if (
-        existingD.dose !== newD.dose ||
+        existingD.dose != newD.dose ||
         existingD.sendReminder != newD.sendReminder ||
         existingD._id.toString() != newD._id
     ) {
@@ -357,6 +364,7 @@ const isEqualDosage = (existingD, newD) => {
         existingD.reminderTime.getHours() == dateToCompare.getHours() &&
         existingD.reminderTime.getMinutes() == dateToCompare.getMinutes()
     ) {
+        console.log("is this true");
         return true;
     }
     return false;
@@ -906,14 +914,11 @@ const descheduleAndDeleteFutureOccurrences = async (dosages) => {
             } else {
                 //TODO: FILTER OCCURRENCES TO BE REMOVED FROM GROUP AND DELETE GROUP IF NECESSARY
                 for (let occurrence of occurrencesToRemove) {
-                    let indexOfOccToRemove = occurrenceGroup.occurrences.findIndex(
+                    let indexOfOccToRemove = group.occurrences.findIndex(
                         (occ) => occ.equals(occurrence._id)
                     );
                     if (indexOfOccToRemove != -1) {
-                        occurrenceGroup.occurrences.splice(
-                            indexOfOccToRemove,
-                            1
-                        );
+                        group.occurrences.splice(indexOfOccToRemove, 1);
                     }
                 }
                 //if the occurrence group no longer has any meds just delete it
