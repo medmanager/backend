@@ -249,9 +249,9 @@ export const updateMedicationFromID = async (req, res) => {
             Dosage.findOneAndUpdate(
                 { _id: dosage },
                 {
-                    dose: dose.dose,
-                    sendReminder: dose.sendReminder,
-                    reminderTime: dose.reminderTime,
+                    dose: d.dose,
+                    sendReminder: d.sendReminder,
+                    reminderTime: d.reminderTime,
                 }
             );
         } else {
@@ -280,15 +280,21 @@ export const updateMedicationFromID = async (req, res) => {
         );
         //mark all the dosages as inactive
         let now = new Date();
-        oldDosages = await Dosage.findAndUpdate({
-            query: { _id: { $in: oldDosages } },
-            update: { $inc: { active: false, inactiveDate: now } },
-        });
+        for (let oldDosage of oldDosages) {
+            oldDosages = await Dosage.findByIdAndUpdate(oldDosage, {
+                active: false,
+                inactiveDate: now,
+            });
+        }
 
         //update the medication with inactive and active dosages
-        medication.inactiveDosages = medication.inactiveDosages.concat(
-            oldDosages
-        );
+        if (medication.inactiveDosages.length > 0) {
+            medication.inactiveDosages = medication.inactiveDosages.concat(
+                oldDosages
+            );
+        } else {
+            medication.inactiveDosages = oldDosages;
+        }
         medication.dosages = activeDosages;
         medication.name = req.body.name;
         medication.strength = req.body.strength;
@@ -299,9 +305,11 @@ export const updateMedicationFromID = async (req, res) => {
         medication.color = req.body.color;
         await medication.save();
 
+        await medication.populate("dosages").execPopulate();
         //finally schedule the future active dosages for the rest of week
         await scheduleMedication(medication);
     } catch (err) {
+        console.log(err);
         return res
             .status(404)
             .json({ message: "error updating medication information!" });
@@ -835,8 +843,7 @@ const descheduleAndDeleteFutureOccurrences = async (dosages) => {
 
         occurrenceGroupsToRemove = await OccurrenceGroup.find({
             _id: { $in: occurrenceGroupsToRemove },
-        });
-        await occurrenceGroupsToRemove.populate("occurrences").execPopulate();
+        }).populate("occurrences");
 
         //iterate over occurrenceGroups and delete groups that only have one occurrence
         for (let group of occurrenceGroupsToRemove) {
@@ -875,13 +882,19 @@ const descheduleAndDeleteFutureOccurrences = async (dosages) => {
             }
         }
 
-        await Occurrence.deleteMany(occurrencesToRemove, (err) => {
-            if (err) console.log("error deleting occurrences");
-        });
+        console.log(occurrencesToRemove);
+
+        await Occurrence.deleteMany(
+            { _id: { $in: occurrencesToRemove } },
+            (err) => {
+                if (err) console.log("error deleting occurrences");
+            }
+        );
         //remove the deleted occurrences from the dosage
         dosage.occurrences = dosage.occurrences.filter((occ) => {
-            !occurrencesToRemove.includes(occ);
+            -1 != occurrencesToRemove.findIndex((occu) => occu._id == occ._id);
         });
-        await dosage.save();
+
+        await dosage.update();
     }
 };
