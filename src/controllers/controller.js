@@ -251,14 +251,7 @@ export const updateMedicationFromID = async (req, res) => {
     for (let newDosage of updatedMed.dosages) {
         let added = false;
         for (let dosage of medication.dosages) {
-            let dosageToCompare = {
-                dose: dosage.dose,
-                sendReminder: dosage.sendReminder,
-                reminderTime: dosage.reminderTime,
-                _id: dosage._id.toString(),
-            };
-            newDosage.reminderTime = new Date(dosage.reminderTime);
-            if (_.isEqual(dosageToCompare, newDosage)) {
+            if (isEqualDosage(dosage, newDosage)) {
                 unchangedDosages.push(dosage);
                 added = true;
             } else if (dosage._id.toString() == newDosage._id) {
@@ -267,6 +260,7 @@ export const updateMedicationFromID = async (req, res) => {
             }
         }
         if (!added) {
+            newDosage._id = null;
             newDosages.push(newDosage);
         }
     }
@@ -348,6 +342,24 @@ export const updateMedicationFromID = async (req, res) => {
     await medication.populate("dosages").execPopulate();
     await scheduleMedication(medication);
     return res.status(200).json(medication);
+};
+
+const isEqualDosage = (existingD, newD) => {
+    if (
+        existingD.dose !== newD.dose ||
+        existingD.sendReminder != newD.sendReminder ||
+        existingD._id.toString() != newD._id
+    ) {
+        return false;
+    }
+    let dateToCompare = new Date(newD.reminderTime);
+    if (
+        existingD.reminderTime.getHours() == dateToCompare.getHours() &&
+        existingD.reminderTime.getMinutes() == dateToCompare.getMinutes()
+    ) {
+        return true;
+    }
+    return false;
 };
 
 export const deleteMedicationFromID = async (req, res) => {
