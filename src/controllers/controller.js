@@ -243,19 +243,18 @@ export const updateMedicationFromID = async (req, res) => {
     let existingDosages = [];
     let oldDosages = [];
     medication.dosages.forEach((dosage) => {
-        let d = req.body.dosages.find((dose) => dose._id == dosage);
+        let d = req.body.dosages.find(
+            (dose) => dose._id == dosage._id.toString()
+        );
         if (d != undefined) {
             existingDosages.push(dosage);
-            Dosage.findOneAndUpdate(
-                { _id: dosage },
-                {
-                    dose: d.dose,
-                    sendReminder: d.sendReminder,
-                    reminderTime: d.reminderTime,
-                }
-            );
+            Dosage.findByIdAndUpdate(dosage._id, {
+                dose: dosage.dose,
+                sendReminder: dosage.sendReminder,
+                reminderTime: dosage.reminderTime,
+            });
         } else {
-            oldDosages.push(dosage);
+            oldDosages.push(dosage._id);
         }
     });
     let newDosages = req.body.dosages.filter((dosage) => dosage._id == null);
@@ -309,9 +308,9 @@ export const updateMedicationFromID = async (req, res) => {
         //finally schedule the future active dosages for the rest of week
         await scheduleMedication(medication);
     } catch (err) {
-        console.log(err);
+        console.error(err);
         return res
-            .status(404)
+            .status(500)
             .json({ message: "error updating medication information!" });
     }
     await medication.populate("dosages").execPopulate();

@@ -1,7 +1,4 @@
-import endOfWeek from "date-fns/endOfWeek";
-import isAfter from "date-fns/isAfter";
-import isBefore from "date-fns/isBefore";
-import startOfWeek from "date-fns/startOfWeek";
+import { endOfWeek, isAfter, isBefore, startOfWeek } from "date-fns";
 
 /**
  * Helper function for getOccurrences that uses the occurrences already stored
@@ -28,8 +25,8 @@ const getWeeklyOccurrences = (user) => {
     user.medications.forEach((med) => {
         med.dosages.forEach((dose) => {
             dose.occurrences.forEach((occurrence) => {
-                //only add occurrence to day if the occurrence is in the timeframe and
-                //between start and end date
+                // only add occurrence to day if the occurrence is in the timeframe and
+                // between start and end date
 
                 if (
                     isAfter(occurrence.scheduledDate, startDate) &&
@@ -46,8 +43,9 @@ const getWeeklyOccurrences = (user) => {
         });
     });
 
-    // console.log({ scheduledDays });
-    //sort each day by date
+    console.log({ scheduledDays });
+
+    // sort each day by date
     scheduledDays.forEach((day) => {
         day.sort(
             (a, b) =>

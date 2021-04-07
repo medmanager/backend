@@ -1,9 +1,12 @@
 import bodyParser from "body-parser";
+import dotenv from "dotenv";
 import express from "express";
 import jsonwebtoken from "jsonwebtoken";
 import mongoose from "mongoose";
+import { initServer } from "./src";
 import routes from "./src/routes/Routes";
-import { initServer } from "./src/server/AllJobs";
+
+dotenv.config({ debug: true });
 
 const app = express();
 const PORT = 4000; // to run local
