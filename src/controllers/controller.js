@@ -1,6 +1,7 @@
 import https from "https";
 import mongoose from "mongoose";
 import schedule from "node-schedule";
+import _ from "lodash";
 import { DosageSchema } from "../models/Dosage";
 import { MedicationSchema } from "../models/Medication";
 import { OccurrenceGroupSchema, OccurrenceSchema } from "../models/Occurrence";
@@ -210,6 +211,7 @@ export const deactivateMedication = async (req, res) => {
 };
 
 export const updateMedicationFromID = async (req, res) => {
+    console.log("is this function even ccalled??");
     if (req.user == null) {
         return res.status(400).json({
             message: "token error: cannot find user from token!",
@@ -225,7 +227,7 @@ export const updateMedicationFromID = async (req, res) => {
     }
     let medication;
     try {
-        medication = await Medication.findById(medId);
+        medication = await Medication.findById(medId).populate("dosages");
         if (!medication) {
             return res.status(404).json({ message: "Medication not found!" });
         }
@@ -238,82 +240,113 @@ export const updateMedicationFromID = async (req, res) => {
     } catch (err) {
         return res.send(err);
     }
-    //we need to invalidate the previous dosages
-    //if a dosage doesn't have an _id, we can assume it's a new dosage
-    let existingDosages = [];
+
+    //this is all garbage
+    let updatedMed = req.body;
+    let unchangedDosages = [];
+    let newDosages = [];
+    let changedDosages = [];
     let oldDosages = [];
-    medication.dosages.forEach((dosage) => {
-        let d = req.body.dosages.find(
-            (dose) => dose._id == dosage._id.toString()
-        );
-        if (d != undefined) {
-            existingDosages.push(dosage);
-            Dosage.findByIdAndUpdate(dosage._id, {
+
+    for (let newDosage of updatedMed.dosages) {
+        let added = false;
+        for (let dosage of medication.dosages) {
+            let dosageToCompare = {
                 dose: dosage.dose,
                 sendReminder: dosage.sendReminder,
                 reminderTime: dosage.reminderTime,
-            });
-        } else {
-            oldDosages.push(dosage._id);
+                _id: dosage._id.toString(),
+            };
+            newDosage.reminderTime = new Date(dosage.reminderTime);
+            if (_.isEqual(dosageToCompare, newDosage)) {
+                unchangedDosages.push(dosage);
+                added = true;
+            } else if (dosage._id.toString() == newDosage._id) {
+                changedDosages.push(dosage);
+                added = true;
+            }
         }
-    });
-    let newDosages = req.body.dosages.filter((dosage) => dosage._id == null);
-    //we have existingDosages, oldDosages, and newDosages
-
-    try {
-        //newDosages need to be added to the database and their occurrences need to be scheduled
-        newDosages.map((d) => {
-            d = new Dosage(d);
-            d.medication = medId;
-        });
-        Dosage.insertMany(newDosages);
-
-        let activeDosages = existingDosages.concat(
-            newDosages.map((d) => (d = d._id))
-        );
-        //existingDosages need to be updated because it's possible they've changed
-        //oldDosages need to be invalidated and the occurrences need to be descheduled
-        //in either case, we should deschedule all future occurrences
-        descheduleAndDeleteFutureOccurrences(
-            oldDosages.concat(existingDosages)
-        );
-        //mark all the dosages as inactive
-        let now = new Date();
-        for (let oldDosage of oldDosages) {
-            oldDosages = await Dosage.findByIdAndUpdate(oldDosage, {
-                active: false,
-                inactiveDate: now,
-            });
+        if (!added) {
+            newDosages.push(newDosage);
         }
-
-        //update the medication with inactive and active dosages
-        if (medication.inactiveDosages.length > 0) {
-            medication.inactiveDosages = medication.inactiveDosages.concat(
-                oldDosages
-            );
-        } else {
-            medication.inactiveDosages = oldDosages;
-        }
-        medication.dosages = activeDosages;
-        medication.name = req.body.name;
-        medication.strength = req.body.strength;
-        medication.strengthUnit = req.body.strengthUnit;
-        medication.amount = req.body.amount;
-        medication.amountUnit = req.body.amountUnit;
-        medication.frequency = req.body.frequency;
-        medication.color = req.body.color;
-        await medication.save();
-
-        await medication.populate("dosages").execPopulate();
-        //finally schedule the future active dosages for the rest of week
-        await scheduleMedication(medication);
-    } catch (err) {
-        console.error(err);
-        return res
-            .status(500)
-            .json({ message: "error updating medication information!" });
     }
+
+    for (let dosage of medication.dosages) {
+        let index1 = changedDosages.findIndex((d) => d._id == dosage._id);
+        let index2 = unchangedDosages.findIndex((d) => d._id == dosage._id);
+        if (index1 == -1 && index2 == -1) {
+            oldDosages.push(dosage);
+        }
+    }
+
+    for (let dosage of changedDosages) {
+        await Dosage.findByIdAndUpdate(dosage._id, {
+            dose: dosage.dose,
+            sendReminder: dosage.sendReminder,
+            reminderTime: dosage.reminderTime,
+        });
+    }
+
+    let now = new Date();
+    for (let dosage of oldDosages) {
+        await Dosage.findByIdAndUpdate(dosage._id, {
+            active: false,
+            inactiveDate: now,
+        });
+    }
+
+    newDosages = newDosages.map((dosage) => {
+        dosage = new Dosage(dosage);
+        console.log(dosage);
+        dosage.medication = medication._id;
+        return dosage;
+    });
+
+    if (newDosages.length > 0) {
+        await Dosage.insertMany(newDosages);
+    }
+
+    let medIdsToInvalidate = changedDosages.map((dosage) => dosage._id);
+    medIdsToInvalidate = medIdsToInvalidate.concat(
+        oldDosages.map((dosage) => dosage._id)
+    );
+
+    if (_.isEqual(medication.frequency, updatedMed.frequency)) {
+        medIdsToInvalidate = medIdsToInvalidate.concat(
+            unchangedDosages.map((dosage) => dosage._id)
+        );
+    }
+
+    descheduleAndDeleteFutureOccurrences(medIdsToInvalidate);
+
+    let activeDosageIds = unchangedDosages.map((dosage) => dosage._id);
+    activeDosageIds = activeDosageIds.concat(
+        changedDosages.map((dosage) => dosage._id)
+    );
+    activeDosageIds = activeDosageIds.concat(
+        newDosages.map((dosage) => dosage._id)
+    );
+
+    if (medication.inactiveDosages == null) {
+        medication.inactiveDosages = oldDosages.map((dosage) => dosage._id);
+    } else {
+        medication.inactiveDosages = medication.inactiveDosages.concat(
+            oldDosages.map((dosage) => dosage._id)
+        );
+    }
+
+    medication.dosages = activeDosageIds;
+    medication.name = updatedMed.name;
+    medication.strength = updatedMed.strength;
+    medication.strengthUnit = updatedMed.strengthUnit;
+    medication.amount = updatedMed.amount;
+    medication.amountUnit = updatedMed.amountUnit;
+    medication.frequency = updatedMed.frequency;
+    medication.color = updatedMed.color;
+    await Medication.updateOne({ _id: medication.id }, medication);
+
     await medication.populate("dosages").execPopulate();
+    await scheduleMedication(medication);
     return res.status(200).json(medication);
 };
 
@@ -824,8 +857,8 @@ export const getOccurrenceGroupFromID = async (req, res) => {
 const descheduleAndDeleteFutureOccurrences = async (dosages) => {
     for (let dosageId of dosages) {
         //first get the dosage and populate the occurrences
-        let dosage = await Dosage.findById(dosageId);
-        await dosage.populate("occurrences").execPopulate();
+        let dosage = await Dosage.findById(dosageId).populate("occurrences");
+        if (dosage == null) continue;
         //we only want to remove occurrences that haven't happened yet
         //and haven't been taken yet
         let now = new Date();

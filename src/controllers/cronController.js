@@ -258,29 +258,6 @@ export const scheduleMedication = async (medication, userId) => {
 //     }
 // };
 
-/**
- * Helper function for scheduleWeeklyOccurrences that removes all occurrenceGroups
- * Right now, we'll remove all occurrenceGroups on every User since occurrenceGroups
- * are directly related to scheduled jobs.
- *
- * One case this doesn't handle: a job is scheduled on Saturday and an occurrenceGroup
- * is created for Saturday at 9pm. If the user forgets to take their medication and
- * the backend fires the emergency contact function on Sunday at 9am, the occurrenceGroup
- * would have been deleted when this function was called at 12am on Sunday for the user.
- *
- * Possible solutions:
- * Check if occurrenceGroup has an emergency contact job scheduled prior to deletion.
- * If occurrenceGroup contains the emergency contact job id, this can be used to
- * check whether the key exists in schedule.scheduledJobs
- */
-// const deletePastOccurrenceGroups = async () => {
-//     await OccurrenceGroup.deleteMany({
-//         scheduledDate: {
-//             $lte: new Date(),
-//         },
-//     });
-// };
-
 const Platform = {
     iOS: "ios",
     Android: "android",
