@@ -1,10 +1,7 @@
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import mongoose from "mongoose";
-import { SettingsSchema, UserSchema } from "../models/User";
-
-let User = mongoose.model("User", UserSchema);
-let Settings = mongoose.model("Settings", SettingsSchema);
+import Settings from "../models/Settings";
+import User from "../models/User";
 
 export const loginRequired = (req, res, next) => {
     if (req.user) {
@@ -132,6 +129,26 @@ export const updateUserSettings = async (req, res) => {
     }
 
     return res.status(200).json(newSettings);
+};
+
+/**
+ * Updates the users device information for notifications
+ */
+export const registerDeviceKey = async (req, res) => {
+    if (req.user == null) {
+        return res.status(400).json({
+            message: "token error: cannot find user from token!",
+        });
+    }
+    let token = req.body.token;
+    let os = req.body.os;
+    if (token == undefined || os == undefined) {
+        return res
+            .status(400)
+            .json({ message: "missing token/deviceType data!" });
+    }
+    await User.findByIdAndUpdate(req.user, { deviceInfo: { token, os } });
+    return res.status(200).json({ ok: true });
 };
 
 // updates the fields inside a user based on the request body's data passed in

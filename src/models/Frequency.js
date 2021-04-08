@@ -1,48 +1,48 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
 const Schema = mongoose.Schema;
 
 const WeekdaySchema = new Schema({
     monday: {
         type: Boolean,
-        default: false
+        default: false,
     },
     tuesday: {
         type: Boolean,
-        default: false
+        default: false,
     },
     wednesday: {
         type: Boolean,
-        default: false
+        default: false,
     },
     thursday: {
         type: Boolean,
-        default: false
+        default: false,
     },
     friday: {
         type: Boolean,
-        default: false
+        default: false,
     },
     saturday: {
         type: Boolean,
-        default: false
+        default: false,
     },
     sunday: {
         type: Boolean,
-        default: false
+        default: false,
     },
 });
 
 export const FrequencySchema = new Schema({
     interval: {
         type: Number,
-        default: 1
+        default: 1,
     },
     intervalUnit: {
         type: String,
-        default: "days"
+        default: "days",
     },
     weekdays: {
         type: WeekdaySchema,
-    }
+    },
 });

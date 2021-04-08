@@ -1,25 +1,15 @@
 import { isAfter, isBefore, startOfWeek } from "date-fns";
 import _ from "lodash";
-import mongoose from "mongoose";
 import scheduler from "node-schedule";
 import {
     getScheduledDays,
     sendNotification,
-} from "./controllers/cronController";
-import { DosageSchema } from "./models/Dosage";
-import { MedicationSchema } from "./models/Medication";
-import { Metadata } from "./models/Metadata";
-import { OccurrenceGroupSchema, OccurrenceSchema } from "./models/Occurrence";
-import { UserSchema } from "./models/User";
-
-const User = mongoose.model("User", UserSchema);
-const Medication = mongoose.model("Medication", MedicationSchema);
-const Dosage = mongoose.model("Dosage", DosageSchema);
-const Occurrence = mongoose.model("Occurrence", OccurrenceSchema);
-const OccurrenceGroup = mongoose.model(
-    "OccurrenceGroup",
-    OccurrenceGroupSchema
-);
+} from "./controllers/cron.controller";
+import Dosage from "./models/Dosage";
+import Metadata from "./models/Metadata";
+import Occurrence from "./models/Occurrence";
+import OccurrenceGroup from "./models/OccurrenceGroup";
+import User from "./models/User";
 
 const DEBUG_CREATE_WEEKLY_OCCURRENCES = false;
 
@@ -84,14 +74,14 @@ const scheduleOccurrenceGroups = async () => {
 
 /**
  * Function to create weekly dosage occurrences for all users
- * This function should be called weekly on Sunday at 0:00 to ensure each
+ * This function should be called weekly on Sunday at 0:00
  */
 const createWeeklyOccurrences = async () => {
     console.log(
         "Creating all the occurrences for the server for the current week..."
     );
     console.log(
-        `Found ${await OccurrenceGroup.count().exec()} occurrence groups in the DB`
+        `Found ${await OccurrenceGroup.countDocuments().exec()} occurrence groups in the DB`
     );
 
     console.log("Deleting all the occurrence groups which never fired...");

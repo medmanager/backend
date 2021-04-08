@@ -1,29 +1,31 @@
+import { getDosages } from "./controllers/dosage.controller";
 import {
     activateMedication,
-    deactivateMedication,
     addNewMedication,
+    deactivateMedication,
     deleteMedicationFromID,
-    fuzzySearchWithString,
-    getDosages,
+    fuzzySearchMedicationName,
     getMedicationFromID,
     getMedications,
+    getMedicationTrackingInfo,
+    updateMedicationFromID,
+} from "./controllers/medication.controller";
+import {
     getOccurrenceFromID,
     getOccurrenceGroupFromID,
     getOccurrences,
-    getTrackingInfo,
-    registerDeviceKey,
     takeDosageOccurrence,
-    updateMedicationFromID,
-} from "../controllers/controller";
+} from "./controllers/occurrence.controller";
 import {
     getCurrentUser,
     login,
     loginRequired,
     register,
+    registerDeviceKey,
     updateUser,
     updateUserSettings,
     verify,
-} from "../controllers/userControllers";
+} from "./controllers/user.controller";
 
 const routes = (app) => {
     app.route("/medication")
@@ -36,12 +38,12 @@ const routes = (app) => {
         .put(loginRequired, updateMedicationFromID)
         .delete(loginRequired, deleteMedicationFromID);
 
-    app.route("/medication/deactivate/:medicationID").put(
+    app.route("/medication/:medicationID/deactivate").get(
         loginRequired,
         deactivateMedication
     );
 
-    app.route("/medication/activate/:medicationID").put(
+    app.route("/medication/:medicationID/activate").get(
         loginRequired,
         activateMedication
     );
@@ -59,7 +61,7 @@ const routes = (app) => {
         getOccurrenceGroupFromID
     );
 
-    app.route("/tracking").get(loginRequired, getTrackingInfo);
+    app.route("/tracking").get(loginRequired, getMedicationTrackingInfo);
 
     app.route("/auth/register").post(register);
 
@@ -81,7 +83,7 @@ const routes = (app) => {
     app.route("/medication/search/:searchStr")
         //currently we do not check for login
         //because search doesn't access a user's data
-        .get(fuzzySearchWithString);
+        .get(fuzzySearchMedicationName);
 };
 
 export default routes;

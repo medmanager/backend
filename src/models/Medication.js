@@ -58,3 +58,6 @@ export const MedicationSchema = new Schema({
         ref: "User",
     },
 });
+
+const Medication = mongoose.model("Medication", MedicationSchema);
+export default Medication;

@@ -4,7 +4,7 @@ import express from "express";
 import jsonwebtoken from "jsonwebtoken";
 import mongoose from "mongoose";
 import { initServer } from "./src";
-import routes from "./src/routes/Routes";
+import routes from "./src/routes";
 
 dotenv.config({ debug: true });
 

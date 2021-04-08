@@ -3,19 +3,9 @@ import firebase from "firebase-admin";
 import mongoose from "mongoose";
 import schedule from "node-schedule";
 import path from "path";
-import { DosageSchema } from "../models/Dosage";
-import { MedicationSchema } from "../models/Medication";
-import { OccurrenceGroupSchema, OccurrenceSchema } from "../models/Occurrence";
-import { UserSchema } from "../models/User";
-
-const User = mongoose.model("User", UserSchema);
-const Medication = mongoose.model("Medication", MedicationSchema);
-const Dosage = mongoose.model("Dosage", DosageSchema);
-const Occurrence = mongoose.model("Occurrence", OccurrenceSchema);
-const OccurrenceGroup = mongoose.model(
-    "OccurrenceGroup",
-    OccurrenceGroupSchema
-);
+import Dosage from "../models/Dosage";
+import Occurrence from "../models/Occurrence";
+import OccurrenceGroup from "../models/OccurrenceGroup";
 
 /**
  * When a new medication is added, schedule new jobs for the week
@@ -23,6 +13,14 @@ const OccurrenceGroup = mongoose.model(
  * ASSUME OTHER MEDS HAVE ALREADY BEEN SCHEDULED
  */
 export const scheduleMedication = async (medication, userId) => {
+    await medication
+        .populate({
+            path: "dosages",
+            model: "Dosage",
+            populate: { path: "occurrences", model: "Occurrence" },
+        })
+        .execPopulate();
+
     let scheduledDays = getScheduledMedicationDays(medication);
     //DO NOT USE .forEach because it won't loop asynchronously
     for (let day of scheduledDays) {
@@ -49,13 +47,7 @@ export const scheduleMedication = async (medication, userId) => {
             }
         }
     }
-    await medication
-        .populate({
-            path: "dosages",
-            model: "Dosage",
-            populate: { path: "occurrences", model: "Occurrence" },
-        })
-        .execPopulate();
+
     //find all occurrenceGroups that belong to the user
     let occurrenceGroups = await OccurrenceGroup.find({ user: userId });
     let sortedOccurrences = sortOccurrencesByTimeMed(medication);
