@@ -1,17 +1,11 @@
-import { isAfter, isBefore, startOfWeek } from "date-fns";
-import _ from "lodash";
+import { isBefore, startOfWeek } from "date-fns";
 import scheduler from "node-schedule";
+import { DEBUG_CREATE_WEEKLY_OCCURRENCES } from "./constants";
 import {
-    getScheduledDays,
-    sendNotification,
-} from "./controllers/cron.controller";
-import Dosage from "./models/Dosage";
+    createAndScheduleWeeklyOccurrences,
+    scheduleOccurrenceGroups,
+} from "./controllers/occurrence.controller";
 import Metadata from "./models/Metadata";
-import Occurrence from "./models/Occurrence";
-import OccurrenceGroup from "./models/OccurrenceGroup";
-import User from "./models/User";
-
-const DEBUG_CREATE_WEEKLY_OCCURRENCES = false;
 
 export const initServer = async () => {
     // check the lastScheduledAt value
@@ -36,8 +30,12 @@ export const initServer = async () => {
         console.log(
             "This should only happen if the server is started on Sunday after 0:00 or if the debug flag has been set"
         );
-        await createWeeklyOccurrences();
-        await scheduleOccurrenceGroups();
+        await createAndScheduleWeeklyOccurrences();
+        await Metadata.findOneAndUpdate(
+            { name: "MedManager" },
+            { lastScheduledAt: new Date() },
+            { upsert: true }
+        );
     } else {
         console.log("Scheduling occurrence groups...");
         await scheduleOccurrenceGroups();
@@ -51,125 +49,6 @@ export const initServer = async () => {
     scheduler.scheduleJob(
         "serverCreateWeeklyOccurrences",
         time,
-        createWeeklyOccurrences
+        createAndScheduleWeeklyOccurrences
     );
-};
-
-/**
- * Schedules all the occurrence groups in the db
- */
-const scheduleOccurrenceGroups = async () => {
-    let groupsToSchedule = await OccurrenceGroup.find({});
-    for (let group of groupsToSchedule) {
-        // schedule notification jobs for the week
-        scheduler.scheduleJob(
-            group._id.toString(),
-            group.scheduledDate,
-            async () => {
-                await sendNotification(group._id);
-            }
-        );
-    }
-};
-
-/**
- * Function to create weekly dosage occurrences for all users
- * This function should be called weekly on Sunday at 0:00
- */
-const createWeeklyOccurrences = async () => {
-    console.log(
-        "Creating all the occurrences for the server for the current week..."
-    );
-    console.log(
-        `Found ${await OccurrenceGroup.countDocuments().exec()} occurrence groups in the DB`
-    );
-
-    console.log("Deleting all the occurrence groups which never fired...");
-    // delete past all the occurrence groups which are before the current time
-    const deleteResult = await OccurrenceGroup.deleteMany({
-        scheduledDate: {
-            $lt: new Date(),
-        },
-    });
-    if (deleteResult.ok) {
-        console.log(
-            `Deleted ${deleteResult.deletedCount} past occurrence groups`
-        );
-    }
-
-    let users = await User.find({});
-    let now = new Date();
-
-    for (let user of users) {
-        // populate all the data for the user
-        await user
-            .populate({
-                path: "medications",
-                model: "Medication",
-                populate: {
-                    path: "dosages",
-                    model: "Dosage",
-                    populate: { path: "occurrences", model: "Occurrence" },
-                },
-            })
-            .execPopulate();
-
-        let occurrences = getScheduledDays(user);
-        let occurrenceObjects = [];
-
-        for (let day of occurrences) {
-            for (let med of day) {
-                for (let dose of med.datesWTime) {
-                    // ensure that the occurrence hasn't already passed
-                    if (isAfter(dose.date, now)) {
-                        // create occurrence object
-                        let occurrence = {
-                            isTaken: false,
-                            timeTaken: null,
-                            scheduledDate: dose.date,
-                            dosage: dose.dosageId,
-                        };
-                        let doseObject = await Dosage.findById(dose.dosageId);
-                        let occurrenceObject = new Occurrence(occurrence);
-                        await occurrenceObject.save();
-                        doseObject.occurrences.push(occurrenceObject);
-                        await doseObject.save();
-                        occurrenceObjects.push(occurrenceObject);
-                    }
-                }
-            }
-        }
-
-        const groupedOccurrences = _.groupBy(occurrenceObjects, (o) =>
-            o.scheduledDate.getTime()
-        );
-
-        for (let [groupScheduledDateTime, occurrences] of Object.entries(
-            groupedOccurrences
-        )) {
-            // filter occurrences that have already been taken
-            occurrences = occurrences.filter((o) => !o.isTaken);
-
-            const occurrenceGroup = new OccurrenceGroup();
-            occurrenceGroup.occurrences = occurrences;
-            occurrenceGroup.user = user;
-            occurrenceGroup.scheduledDate = new Date(
-                Number(groupScheduledDateTime)
-            );
-
-            const occurrenceIds = occurrences.map((o) => o._id);
-            await Occurrence.updateMany(
-                { _id: { $in: occurrenceIds } },
-                { group: occurrenceGroup._id }
-            );
-            await occurrenceGroup.save();
-        }
-    }
-
-    await Metadata.findOneAndUpdate(
-        { name: "MedManager" },
-        { lastScheduledAt: now },
-        { upsert: true }
-    );
-    console.log("Occurrence creation done!");
 };

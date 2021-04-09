@@ -1,5 +1,4 @@
 import https from "https";
-import _ from "lodash";
 import mongoose from "mongoose";
 import scheduler from "node-schedule";
 import Dosage from "../models/Dosage";
@@ -7,8 +6,11 @@ import Medication from "../models/Medication";
 import Occurrence from "../models/Occurrence";
 import OccurrenceGroup from "../models/OccurrenceGroup";
 import User from "../models/User";
-import { scheduleDosages, scheduleMedication } from "./cron.controller";
-import { descheduleAndDeleteFutureOccurrences } from "./occurrence.controller";
+import { deepEqual } from "../utils";
+import {
+    createAndScheduleMedicationDosageOccurrences,
+    descheduleAndDeleteFutureDosageOccurrences
+} from "./occurrence.controller";
 
 // add a new medication
 export const addNewMedication = async (req, res) => {
@@ -24,7 +26,7 @@ export const addNewMedication = async (req, res) => {
     const medication = {
         ...req.body,
         dosages: [],
-        user: user._id,
+        user: req.user,
     };
     const newMedication = new Medication(medication);
 
@@ -51,16 +53,13 @@ export const addNewMedication = async (req, res) => {
         });
     }
 
-    // populate all the nested data onto the new medication
-    await newMedication
-        .populate({
-            path: "dosages",
-            model: "Dosage",
-        })
-        .execPopulate();
+    // // populate all the nested data onto the new medication
+    // await newMedication
+    //     .populate("dosages")
+    //     .execPopulate();
 
     try {
-        await scheduleMedication(newMedication, user._id);
+        await createAndScheduleMedicationDosageOccurrences(newMedication);
     } catch (err) {
         console.error(err);
         return res.status(500).json({
@@ -75,12 +74,6 @@ export const addNewMedication = async (req, res) => {
  * Gets a users medications
  */
 export const getMedications = (req, res) => {
-    if (req.user == null) {
-        return res.status(400).json({
-            message: "token error: cannot find user from token!",
-        });
-    }
-
     User.findById(req.user, (err, user) => {
         if (err) {
             return res.send(err);
@@ -140,18 +133,15 @@ export const getMedicationFromID = async (req, res) => {
  * Sets a medication to active
  */
 export const activateMedication = async (req, res) => {
-    if (req.user == null) {
-        return res
-            .status(400)
-            .json({ message: "token error: cannot find user from token" });
-    }
     const medId = req.params.medicationID;
     if (!medId) {
         return res.status(400).send({ message: "Medication id is required" });
     }
     let medication;
     try {
-        medication = await Medication.findById(medId);
+        medication = await Medication.findById(medId)
+            .populate("dosages")
+            .exec();
 
         if (!medication) {
             return res.status(404).json({ message: "Medication not found" });
@@ -166,12 +156,12 @@ export const activateMedication = async (req, res) => {
         return res.send(err);
     }
     if (medication.active) return res.status(200).json(medication);
-    //reschedule occurrences for the week and mark as active
+    // reschedule occurrences for the week and mark as active
     await Medication.findOneAndUpdate(
         { _id: medication._id },
         { active: true }
     );
-    await scheduleMedication(medication);
+    await createAndScheduleMedicationDosageOccurrences(medication);
     return res.status(200).json(medication);
 };
 
@@ -179,18 +169,15 @@ export const activateMedication = async (req, res) => {
  * Sets a medication to inactive
  */
 export const deactivateMedication = async (req, res) => {
-    if (req.user == null) {
-        return res
-            .status(400)
-            .json({ message: "token error: cannot find user from token" });
-    }
     const medId = req.params.medicationID;
     if (!medId) {
         return res.status(400).send({ message: "Medication id is required" });
     }
     let medication;
     try {
-        medication = await Medication.findById(medId);
+        medication = await Medication.findById(medId)
+            .populate("dosages")
+            .exec();
 
         if (!medication) {
             return res.status(404).json({ message: "Medication not found" });
@@ -205,17 +192,14 @@ export const deactivateMedication = async (req, res) => {
         return res.send(err);
     }
     // mark medication as inactive
-    await Medication.findByIdAndUpdate(medId, { active: false });
-    await descheduleAndDeleteFutureOccurrences(medication.dosages);
+    await descheduleAndDeleteFutureDosageOccurrences(medication);
+    await Medication.findByIdAndUpdate(medId, {
+        active: false,
+    });
     return res.status(200).json(medication);
 };
 
 export const updateMedicationFromID = async (req, res) => {
-    if (req.user == null) {
-        return res.status(400).json({
-            message: "token error: cannot find user from token!",
-        });
-    }
     const medId = req.params.medicationID;
     if (!medId) {
         return res.status(400).send({ message: "Medication id is required" });
@@ -226,7 +210,9 @@ export const updateMedicationFromID = async (req, res) => {
     }
     let medication;
     try {
-        medication = await Medication.findById(medId).populate("dosages");
+        medication = await Medication.findById(medId)
+            .populate("dosages")
+            .exec();
         if (!medication) {
             return res.status(404).json({ message: "Medication not found!" });
         }
@@ -240,134 +226,194 @@ export const updateMedicationFromID = async (req, res) => {
         return res.send(err);
     }
 
-    let updatedMed = req.body;
-    let unchangedDosages = [];
-    let newDosages = [];
-    let changedDosages = [];
-    let oldDosages = [];
+    let updatedMedication = req.body;
+    
+    // if either the dosages or frequency has changed then delete and reschedule all future occurrences
 
-    for (let newDosage of updatedMed.dosages) {
-        let added = false;
-        for (let dosage of medication.dosages) {
-            if (isEqualDosage(dosage, newDosage)) {
-                unchangedDosages.push(dosage);
-                added = true;
-            } else if (dosage._id.toString() == newDosage._id) {
-                changedDosages.push(dosage);
-                added = true;
-            }
-        }
-        if (!added) {
-            if ("_id" in newDosage) {
-                delete newDosage._id;
-            }
+    const dosagesToCompare = medication.dosages.map(
+        ({ _id, reminderTime, dose, sendReminder }) => ({
+            _id,
+            reminderTime,
+            dose,
+            sendReminder,
+        })
+    );
+
+    const frequencyToCompare = {
+        interval: medication.frequency.interval,
+        intervalUnit: medication.frequency.intervalUnit,
+        weekdays: {
+            sunday: medication.frequency.weekdays.sunday,
+            monday: medication.frequency.weekdays.monday,
+            tuesday: medication.frequency.weekdays.tuesday,
+            wednesday: medication.frequency.weekdays.wednesday,
+            thursday: medication.frequency.weekdays.thursday,
+            friday: medication.frequency.weekdays.friday,
+            saturday: medication.frequency.weekdays.saturday,
+        },
+    };
+
+    if (
+        !deepEqual(updatedMedication.dosages, dosagesToCompare) ||
+        !deepEqual(updatedMedication.frequency, frequencyToCompare)
+    ) {
+        console.log("Dosages or frequency has changed");
+        // dosages or frequency have changed since last time, invalidate all previous dosages
+        await descheduleAndDeleteFutureDosageOccurrences(medication);
+        const inactiveDosages = medication.inactiveDosages.concat(
+            medication.dosages
+        );
+        const dosageIdsToInvalidate = inactiveDosages.map(
+            (dosage) => dosage._id
+        );
+        await Dosage.updateMany(
+            { _id: { $in: dosageIdsToInvalidate } },
+            { active: false, inactiveDate: new Date() }
+        );
+
+        // NOTE: assume all dosages on the updated medication are new dosages
+        const newDosages = [];
+        for (const dosage of updatedMedication.dosages) {
+            const dosageObj = {
+                dose: dosage.dose,
+                sendReminder: dosage.sendReminder,
+                reminderTime: dosage.reminderTime,
+                active: true,
+                medication: medId,
+            };
+            const newDosage = new Dosage(dosageObj);
+            await newDosage.save();
             newDosages.push(newDosage);
         }
-    }
 
-    for (let dosage of medication.dosages) {
-        let index1 = changedDosages.findIndex(
-            (d) => d._id == dosage._id.toString()
-        );
-        let index2 = unchangedDosages.findIndex(
-            (d) => d._id == dosage._id.toString()
-        );
-        if (index1 == -1 && index2 == -1) {
-            oldDosages.push(dosage);
-        }
-    }
-
-    for (let dosage of changedDosages) {
-        await Dosage.findByIdAndUpdate(dosage._id, {
-            dose: dosage.dose,
-            sendReminder: dosage.sendReminder,
-            reminderTime: dosage.reminderTime,
-        });
-    }
-
-    let now = new Date();
-    for (let dosage of oldDosages) {
-        await Dosage.findByIdAndUpdate(dosage._id, {
-            active: false,
-            inactiveDate: now,
-        });
-    }
-
-    newDosages = newDosages.map((dosage) => {
-        dosage = new Dosage(dosage);
-        dosage.medication = medication._id;
-        return dosage;
-    });
-    console.log({ newDosages });
-    console.log({ unchangedDosages });
-    console.log({ changedDosages });
-    console.log({ oldDosages });
-
-    if (newDosages.length > 0) {
-        await Dosage.insertMany(newDosages);
-    }
-
-    let dosagesToInvalidate = changedDosages;
-    dosagesToInvalidate = dosagesToInvalidate.concat(oldDosages);
-
-    if (_.isEqual(medication.frequency, updatedMed.frequency)) {
-        dosagesToInvalidate = dosagesToInvalidate.concat(unchangedDosages);
-    }
-
-    const dosageIdsToInvalidate = dosagesToInvalidate.map(
-        (dosage) => dosage._id
-    );
-    descheduleAndDeleteFutureOccurrences(dosageIdsToInvalidate);
-
-    let activeDosageIds = changedDosages;
-    activeDosageIds = activeDosageIds.concat(newDosages);
-    let dosagesToSchedule = activeDosageIds;
-    activeDosageIds = activeDosageIds.concat(unchangedDosages);
-
-    if (medication.inactiveDosages == null) {
-        medication.inactiveDosages = oldDosages;
+        medication.dosages = newDosages;
+        medication.inactiveDosages = inactiveDosages;
+        medication.frequency = updatedMedication.frequency;
+        medication.name = updatedMedication.name;
+        medication.strength = updatedMedication.strength;
+        medication.strengthUnit = updatedMedication.strengthUnit;
+        medication.amount = updatedMedication.amount;
+        medication.amountUnit = updatedMedication.amountUnit;
+        medication.color = updatedMedication.color;
+        await medication.save();
+        await medication.populate("dosages").execPopulate(); // is this line necessary?
+        await createAndScheduleMedicationDosageOccurrences(medication);
     } else {
-        medication.inactiveDosages = medication.inactiveDosages.concat(
-            oldDosages
-        );
+        medication.name = updatedMedication.name;
+        medication.strength = updatedMedication.strength;
+        medication.strengthUnit = updatedMedication.strengthUnit;
+        medication.amount = updatedMedication.amount;
+        medication.amountUnit = updatedMedication.amountUnit;
+        medication.color = updatedMedication.color;
+        await medication.save();
     }
-    console.log({ activeDosageIds });
 
-    medication.dosages = activeDosageIds;
-    medication.name = updatedMed.name;
-    medication.strength = updatedMed.strength;
-    medication.strengthUnit = updatedMed.strengthUnit;
-    medication.amount = updatedMed.amount;
-    medication.amountUnit = updatedMed.amountUnit;
-    medication.frequency = updatedMed.frequency;
-    medication.color = updatedMed.color;
-    await Medication.updateOne({ _id: medication.id }, medication);
-
-    await medication.populate("dosages").execPopulate();
-    console.log(medication);
-    await scheduleDosages(medication, dosagesToSchedule, medication.user);
     return res.status(200).json(medication);
+
+    // for (let newDosage of updatedMed.dosages) {
+    //     for (let dosage of medication.dosages) {
+    //         if (deepEqual(dosage, newDosage)) {
+    //             unchangedDosages.push(dosage);
+    //         } else if (dosage._id.toString() == newDosage._id) {
+    //             changedDosages.push(dosage);
+    //         } else {
+    //             newDosages.push(newDosage);
+    //         }
+    //     }
+    //     // if (!added) {
+    //     //     if ("_id" in newDosage) {
+    //     //         delete newDosage._id;
+    //     //     }
+    //     //     newDosages.push(newDosage);
+    //     // }
+    // }
+
+    // for (let dosage of medication.dosages) {
+    //     let index1 = changedDosages.findIndex(
+    //         (d) => d._id == dosage._id.toString()
+    //     );
+    //     let index2 = unchangedDosages.findIndex(
+    //         (d) => d._id == dosage._id.toString()
+    //     );
+    //     if (index1 == -1 && index2 == -1) {
+    //         oldDosages.push(dosage);
+    //     }
+    // }
+
+    // for (let dosage of changedDosages) {
+    //     await Dosage.findByIdAndUpdate(dosage._id, {
+    //         dose: dosage.dose,
+    //         sendReminder: dosage.sendReminder,
+    //         reminderTime: dosage.reminderTime,
+    //     });
+    // }
+
+    // let now = new Date();
+    // for (let dosage of oldDosages) {
+    //     await Dosage.findByIdAndUpdate(dosage._id, {
+    //         active: false,
+    //         inactiveDate: now,
+    //     });
+    // }
+
+    // newDosages = newDosages.map((dosage) => {
+    //     dosage = new Dosage(dosage);
+    //     dosage.medication = medication._id;
+    //     return dosage;
+    // });
+    // console.log({ newDosages });
+    // console.log({ unchangedDosages });
+    // console.log({ changedDosages });
+    // console.log({ oldDosages });
+
+    // if (newDosages.length > 0) {
+    //     await Dosage.insertMany(newDosages);
+    // }
+
+    // let dosagesToInvalidate = changedDosages;
+    // dosagesToInvalidate = dosagesToInvalidate.concat(oldDosages);
+
+    // if (!deepEqual(medication.frequency, updatedMedication.frequency)) {
+    //     dosagesToInvalidate = dosagesToInvalidate.concat(unchangedDosages);
+    // }
+
+    // const dosageIdsToInvalidate = dosagesToInvalidate.map(
+    //     (dosage) => dosage._id
+    // );
+    // descheduleAndDeleteFutureOccurrences(dosageIdsToInvalidate);
+
+    // let activeDosageIds = changedDosages;
+    // activeDosageIds = activeDosageIds.concat(newDosages);
+    // let dosagesToSchedule = activeDosageIds;
+    // activeDosageIds = activeDosageIds.concat(unchangedDosages);
+
+    // // if (medication.inactiveDosages == null) {
+    // //     medication.inactiveDosages = oldDosages;
+    // // } else {
+    // //     medication.inactiveDosages = medication.inactiveDosages.concat(
+    // //         oldDosages
+    // //     );
+    // // }
+    // // console.log({ activeDosageIds });
+
+    // medication.dosages = activeDosageIds;
+    // medication.name = updatedMedication.name;
+    // medication.strength = updatedMedication.strength;
+    // medication.strengthUnit = updatedMedication.strengthUnit;
+    // medication.amount = updatedMedication.amount;
+    // medication.amountUnit = updatedMedication.amountUnit;
+    // medication.frequency = updatedMedication.frequency;
+    // medication.color = updatedMedication.color;
+    // await Medication.updateOne({ _id: medication.id }, medication);
+
+    // await medication.populate("dosages").execPopulate();
+    // await scheduleDosages(medication, dosagesToSchedule, medication.user);
+    // return res.status(200).json(medication);
 };
 
-const isEqualDosage = (existingD, newD) => {
-    if (
-        existingD.dose != newD.dose ||
-        existingD.sendReminder != newD.sendReminder ||
-        existingD._id.toString() != newD._id
-    ) {
-        return false;
-    }
-    let dateToCompare = new Date(newD.reminderTime);
-    if (
-        existingD.reminderTime.getHours() == dateToCompare.getHours() &&
-        existingD.reminderTime.getMinutes() == dateToCompare.getMinutes()
-    ) {
-        console.log("is this true");
-        return true;
-    }
-    return false;
-};
-
+/**
+ * Delete a medication based on its identifier
+ */
 export const deleteMedicationFromID = async (req, res) => {
     const { medicationID } = req.params;
 
@@ -394,9 +440,12 @@ export const deleteMedicationFromID = async (req, res) => {
     );
 
     const groupsToRemove = {}; // Maps the group id (string) to an array of occurrence object ids
+    const occurrenceIdsToRemove = [];
     for (let dosage of medication.dosages) {
         for (let occurrence of dosage.occurrences) {
-            if (occurrence.group in groupsToRemove) {
+            if (!occurrence.group) {
+                occurrenceIdsToRemove.push(occurrence._id); // these occurrences don't have a group for some reason
+            } else if (occurrence.group in groupsToRemove) {
                 groupsToRemove[occurrence.group.toString()].push(
                     occurrence._id
                 );
@@ -405,6 +454,8 @@ export const deleteMedicationFromID = async (req, res) => {
             }
         }
     }
+
+    await Occurrence.deleteMany({ _id: { $in: occurrenceIdsToRemove } });
 
     try {
         for (let [groupId, occurrenceIds] of Object.entries(groupsToRemove)) {
@@ -415,7 +466,11 @@ export const deleteMedicationFromID = async (req, res) => {
             const groupObjectId = mongoose.Types.ObjectId(groupId);
             const group = await OccurrenceGroup.findById(groupObjectId);
 
+            // the case where group is null here is confusing
+            // that means that some other routine deleted this group before we had a chance to delete it here
+
             if (
+                group &&
                 occurrenceIds.length === group.occurrences.length &&
                 group.occurrences.every((occ, idx) =>
                     occ.equals(occurrenceIds[idx])
@@ -432,7 +487,7 @@ export const deleteMedicationFromID = async (req, res) => {
                 await OccurrenceGroup.deleteOne({
                     _id: mongoose.Types.ObjectId(groupId),
                 });
-            } else {
+            } else if (group) {
                 // remove the groups occurrence ids from this medication
                 for (let occurrenceId of occurrenceIds) {
                     let indexOfOccToRemove = group.occurrences.findIndex(
@@ -446,15 +501,15 @@ export const deleteMedicationFromID = async (req, res) => {
                 await group.save();
             }
 
-            await Occurrence.deleteMany({ _id: { $in: occurrenceIds } });
+            await Occurrence.deleteMany({ _id: { $in: occurrenceIds } }).exec();
         }
 
         await Dosage.deleteMany({
             _id: {
                 $in: dosageIdsToRemove,
             },
-        });
-        await Medication.findByIdAndDelete(medicationID);
+        }).exec();
+        await Medication.findByIdAndDelete(medicationID).exec();
 
         return res.status(200).json({ ok: true });
     } catch (err) {
@@ -578,7 +633,9 @@ export const fuzzySearchMedicationName = (req, res) => {
     const req2 = https.request(
         {
             hostname: "rxnav.nlm.nih.gov",
-            path: "/REST/spellingsuggestions.json?name=" + searchStr, //append searchStr to path
+            path:
+                "/REST/spellingsuggestions.json?name=" +
+                encodeURIComponent(searchStr), //append searchStr to path
         },
         (res2) => {
             let data = "";
@@ -621,11 +678,6 @@ export const fuzzySearchMedicationName = (req, res) => {
 };
 
 export const getMedicationTrackingInfo = async (req, res) => {
-    if (req.user == null) {
-        return res.status(400).json({
-            message: "token error: cannot find user from token!",
-        });
-    }
     try {
         let user = await User.findById(req.user);
         await user
@@ -633,7 +685,7 @@ export const getMedicationTrackingInfo = async (req, res) => {
                 path: "medications",
                 model: "Medication",
                 populate: {
-                    //not 100% percent sure if this syntax works
+                    // not 100% percent sure if this syntax works
                     path: "dosages inactiveDosages",
                     model: "Dosage",
                     populate: { path: "occurrences", model: "Occurrence" },

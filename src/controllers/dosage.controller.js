@@ -4,14 +4,7 @@ import User from "../models/User";
  * returns an array of dosages independent of medications
  */
 export const getDosages = (req, res) => {
-    let userId = req.user;
-    if (userId == null) {
-        return res
-            .status(404)
-            .json({ message: "token invalid: cannot get user" });
-    }
-
-    return User.findById({ _id: userId }, (err, user) => {
+    return User.findById(req.user, (err, user) => {
         if (err) {
             return res.status(404).json({ message: "cannot find user!" });
         }
@@ -26,6 +19,6 @@ export const getDosages = (req, res) => {
                 dosages.push(dosage);
             });
         });
-        return res.status(200).json({ dosages: dosages });
+        return res.status(200).json({ dosages });
     });
 };

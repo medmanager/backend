@@ -3,390 +3,9 @@ import firebase from "firebase-admin";
 import mongoose from "mongoose";
 import schedule from "node-schedule";
 import path from "path";
-import Dosage from "../models/Dosage";
-import Occurrence from "../models/Occurrence";
+import { Platform } from "../constants";
 import OccurrenceGroup from "../models/OccurrenceGroup";
-
-/**
- * When a new medication is added, schedule new jobs for the week
- * and store array of occurrences
- * ASSUME OTHER MEDS HAVE ALREADY BEEN SCHEDULED
- */
-export const scheduleMedication = async (medication, userId) => {
-    await medication
-        .populate({
-            path: "dosages",
-            model: "Dosage",
-            populate: { path: "occurrences", model: "Occurrence" },
-        })
-        .execPopulate();
-
-    let scheduledDays = getScheduledMedicationDays(medication);
-    //DO NOT USE .forEach because it won't loop asynchronously
-    for (let day of scheduledDays) {
-        for (let dosageOccurrence of day) {
-            //need to ensure only schedule occurrences for dosagesIds on medication
-            for (let dose of dosageOccurrence.datesWTime) {
-                let now = new Date();
-                if (now.getTime() < dose.date.getTime()) {
-                    //create occurrence
-                    let occurrence = {
-                        isTaken: false,
-                        timeTaken: null,
-                        scheduledDate: dose.date,
-                        dosage: dose.dosageId,
-                    };
-                    //not sure if we can use findOneAndUpdate here
-                    //since we need to be able to add occurrence to the queue
-                    let uDose = await Dosage.findOne({ _id: dose.dosageId });
-                    occurrence = new Occurrence(occurrence);
-                    await occurrence.save();
-                    uDose.occurrences.push(occurrence._id);
-                    await uDose.save();
-                }
-            }
-        }
-    }
-
-    //find all occurrenceGroups that belong to the user
-    let occurrenceGroups = await OccurrenceGroup.find({ user: userId });
-    let sortedOccurrences = sortOccurrencesByTimeMed(medication);
-    let now = new Date();
-    for (let dayIndex = 0; dayIndex < sortedOccurrences.length; dayIndex++) {
-        //skip over previous days of the week
-        if (dayIndex < now.getDay()) {
-            continue;
-        }
-        let day = sortedOccurrences[dayIndex];
-        //iterate over each day and group together occurrences that happen in the same minute
-        for (let i = 0; i < day.length; i++) {
-            //if scheduledDate has already passed don't do anything
-            if (day[i].scheduledDate.getTime() < now.getTime()) continue;
-
-            //CHECK IF THERE IS AN EXISTING OCCURRENCE GROUP AT THIS TIME
-            let indexOfOccGroup = occurrenceGroups.findIndex(
-                (occGroup) =>
-                    occGroup.scheduledDate.getDay() ==
-                        day[i].scheduledDate.getDay() &&
-                    occGroup.scheduledDate.getHours() ==
-                        day[i].scheduledDate.getHours() &&
-                    occGroup.scheduledDate.getMinutes() ==
-                        day[i].scheduledDate.getMinutes()
-            );
-            //if there is an existing group, merge new occurrences into group
-            let occurrenceGroup;
-            let oldGroup = false;
-            if (indexOfOccGroup != -1) {
-                oldGroup = true;
-                occurrenceGroup = occurrenceGroups[indexOfOccGroup];
-            } else {
-                occurrenceGroup = new OccurrenceGroup();
-            }
-            let assembleGroup = [];
-            assembleGroup.push(day[i]);
-            await Occurrence.findOneAndUpdate(
-                { _id: day[i]._id },
-                { group: occurrenceGroup._id }
-            );
-            let occurrenceTime =
-                day[i].scheduledDate.getHours() +
-                day[i].scheduledDate.getMinutes();
-            let j = i + 1;
-            for (; j < day.length; j++) {
-                let nOccurrenceTime =
-                    day[j].scheduledDate.getHours() +
-                    day[j].scheduledDate.getMinutes();
-                if (occurrenceTime == nOccurrenceTime) {
-                    assembleGroup.push(day[j]);
-                    await Occurrence.findOneAndUpdate(
-                        { _id: day[j]._id },
-                        { group: occurrenceGroup._id }
-                    );
-                } else if (occurrenceTime < nOccurrenceTime) {
-                    break;
-                }
-            }
-            i = j - 1;
-            occurrenceGroup.occurrences = occurrenceGroup.occurrences.concat(
-                assembleGroup
-            );
-            occurrenceGroup.user = userId;
-            //set scheduleDate equal to the first occurrence in assembleGroup
-            //assembleGroup should always have at least one occurrence in it
-            occurrenceGroup.scheduledDate = new Date(
-                assembleGroup[0].scheduledDate.getTime()
-            );
-            //save occurrence group
-            if (oldGroup) {
-                //if we're using an existing group, just update with
-                //the new number of occurrences
-                await OccurrenceGroup.findOneAndUpdate(
-                    { _id: occurrenceGroup._id },
-                    { occurrences: occurrenceGroup.occurrences }
-                );
-            } else {
-                await occurrenceGroup.save();
-                //schedule job if it's a new group
-                schedule.scheduleJob(
-                    occurrenceGroup._id.toString(),
-                    occurrenceGroup.scheduledDate,
-                    async () => {
-                        await sendNotification(occurrenceGroup._id, userId);
-                    }
-                );
-            }
-        }
-    }
-};
-
-export const scheduleDosages = async (medication, dosages, userId) => {
-    let scheduledDays = getScheduledMedicationDays(medication);
-    //DO NOT USE .forEach because it won't loop asynchronously
-    for (let day of scheduledDays) {
-        for (let dosageOccurrence of day) {
-            //need to ensure only schedule occurrences for dosagesIds on medication
-            for (let dose of dosageOccurrence.datesWTime) {
-                let index = dosages.findIndex((dosage) =>
-                    dosage._id.equals(dose.dosageId)
-                );
-                if (index == -1) continue;
-                let now = new Date();
-                if (now.getTime() < dose.date.getTime()) {
-                    //create occurrence
-                    let occurrence = {
-                        isTaken: false,
-                        timeTaken: null,
-                        scheduledDate: dose.date,
-                        dosage: dose.dosageId,
-                    };
-                    //not sure if we can use findOneAndUpdate here
-                    //since we need to be able to add occurrence to the queue
-                    let uDose = await Dosage.findOne({ _id: dose.dosageId });
-                    occurrence = new Occurrence(occurrence);
-                    await occurrence.save();
-                    uDose.occurrences.push(occurrence._id);
-                    await uDose.save();
-                }
-            }
-        }
-    }
-    await medication
-        .populate({
-            path: "dosages",
-            model: "Dosage",
-            populate: { path: "occurrences", model: "Occurrence" },
-        })
-        .execPopulate();
-    //find all occurrenceGroups that belong to the user
-    let occurrenceGroups = await OccurrenceGroup.find({ user: userId });
-    let sortedOccurrences = sortOccurrencesByTimeMed(medication);
-    let now = new Date();
-    for (let dayIndex = 0; dayIndex < sortedOccurrences.length; dayIndex++) {
-        //skip over previous days of the week
-        if (dayIndex < now.getDay()) {
-            continue;
-        }
-        let day = sortedOccurrences[dayIndex];
-        //iterate over each day and group together occurrences that happen in the same minute
-        for (let i = 0; i < day.length; i++) {
-            //if scheduledDate has already passed don't do anything
-            if (day[i].scheduledDate.getTime() < now.getTime()) continue;
-            let index = dosages.findIndex((dosage) =>
-                dosage._id.equals(day[i].dosage)
-            );
-            if (index == -1) continue;
-
-            //CHECK IF THERE IS AN EXISTING OCCURRENCE GROUP AT THIS TIME
-            let indexOfOccGroup = occurrenceGroups.findIndex(
-                (occGroup) =>
-                    occGroup.scheduledDate.getDay() ==
-                        day[i].scheduledDate.getDay() &&
-                    occGroup.scheduledDate.getHours() ==
-                        day[i].scheduledDate.getHours() &&
-                    occGroup.scheduledDate.getMinutes() ==
-                        day[i].scheduledDate.getMinutes()
-            );
-            //if there is an existing group, merge new occurrences into group
-            let occurrenceGroup;
-            let oldGroup = false;
-            if (indexOfOccGroup != -1) {
-                oldGroup = true;
-                occurrenceGroup = occurrenceGroups[indexOfOccGroup];
-            } else {
-                occurrenceGroup = new OccurrenceGroup();
-            }
-            let assembleGroup = [];
-            assembleGroup.push(day[i]);
-            await Occurrence.findOneAndUpdate(
-                { _id: day[i]._id },
-                { group: occurrenceGroup._id }
-            );
-            let occurrenceTime =
-                day[i].scheduledDate.getHours() +
-                day[i].scheduledDate.getMinutes();
-            let j = i + 1;
-            for (; j < day.length; j++) {
-                let nOccurrenceTime =
-                    day[j].scheduledDate.getHours() +
-                    day[j].scheduledDate.getMinutes();
-                if (occurrenceTime == nOccurrenceTime) {
-                    assembleGroup.push(day[j]);
-                    await Occurrence.findOneAndUpdate(
-                        { _id: day[j]._id },
-                        { group: occurrenceGroup._id }
-                    );
-                } else if (occurrenceTime < nOccurrenceTime) {
-                    break;
-                }
-            }
-            i = j - 1;
-            occurrenceGroup.occurrences = occurrenceGroup.occurrences.concat(
-                assembleGroup
-            );
-            occurrenceGroup.user = userId;
-            //set scheduleDate equal to the first occurrence in assembleGroup
-            //assembleGroup should always have at least one occurrence in it
-            occurrenceGroup.scheduledDate = new Date(
-                assembleGroup[0].scheduledDate.getTime()
-            );
-            //save occurrence group
-            if (oldGroup) {
-                //if we're using an existing group, just update with
-                //the new number of occurrences
-                await OccurrenceGroup.findOneAndUpdate(
-                    { _id: occurrenceGroup._id },
-                    { occurrences: occurrenceGroup.occurrences }
-                );
-            } else {
-                await occurrenceGroup.save();
-                //schedule job if it's a new group
-                schedule.scheduleJob(
-                    occurrenceGroup._id.toString(),
-                    occurrenceGroup.scheduledDate,
-                    async () => {
-                        await sendNotification(occurrenceGroup._id, userId);
-                    }
-                );
-            }
-        }
-    }
-};
-
-/**
- * function to schedule weekly dosage occurrences for the week
- * Must create an occurrence entry array for each dosage
- */
-// export const scheduleWeeklyOccurrences = async (userId) => {
-//     console.log("schedule weekly occurrences");
-//     let user = await User.findById(userId);
-//     let date = new Date();
-//     // check is the user has already been scheduled this week
-//     // if so, we don't want to add any more occurrences since they will be duplicates
-
-//     await user
-//         .populate({
-//             path: "medications",
-//             model: "Medication",
-//             populate: {
-//                 path: "dosages",
-//                 model: "Dosage",
-//                 populate: { path: "occurrences", model: "Occurrence" },
-//             },
-//         })
-//         .execPopulate();
-//     let occurrences = getScheduledDays(user);
-//     for (let day of occurrences) {
-//         for (let med of day) {
-//             //we found the right med
-//             for (let dose of med.datesWTime) {
-//                 //ensure that the occurrence hasn't already passed
-//                 if (date.getTime() < dose.date.getTime()) {
-//                     //create occurrence
-//                     let occurrence = {
-//                         isTaken: false,
-//                         timeTaken: null,
-//                         scheduledDate: dose.date,
-//                         dosage: dose.dosageId,
-//                     };
-//                     let uDose = await Dosage.findOne({
-//                         _id: dose.dosageId,
-//                     });
-//                     occurrence = new Occurrence(occurrence);
-//                     await occurrence.save();
-//                     uDose.occurrences.push(occurrence);
-//                     await uDose.save();
-//                 }
-//             }
-//         }
-//     }
-
-//     let sortedOccurrences = sortOccurrencesByTime(user);
-//     for (let dayIndex = 0; dayIndex < sortedOccurrences.length; dayIndex++) {
-//         //skip over previous days of the week
-//         if (dayIndex < date.getDay()) {
-//             continue;
-//         }
-//         let day = sortedOccurrences[dayIndex];
-//         //iterate over each day and group together occurrences that happen in the same minute
-//         for (let i = 0; i < day.length; i++) {
-//             //if scheduledDate has already passed don't do anything
-//             //if occurrence has already been taken don't schedule it
-//             if (
-//                 day[i].scheduledDate.getTime() < date.getTime() ||
-//                 day[i].isTaken
-//             )
-//                 continue;
-//             let occurrenceGroup = new OccurrenceGroup();
-//             let assembleGroup = [];
-//             assembleGroup.push(day[i]);
-//             await Occurrence.findOneAndUpdate(
-//                 { _id: day[i]._id },
-//                 { group: occurrenceGroup._id }
-//             );
-//             let occurrenceTime =
-//                 day[i].scheduledDate.getHours() +
-//                 day[i].scheduledDate.getMinutes();
-//             let j = i + 1;
-//             for (; j < day.length; j++) {
-//                 let nOccurrenceTime =
-//                     day[j].scheduledDate.getHours() +
-//                     day[j].scheduledDate.getMinutes();
-//                 if (occurrenceTime == nOccurrenceTime && !day[j].isTaken) {
-//                     assembleGroup.push(day[j]);
-//                     await Occurrence.findOneAndUpdate(
-//                         { _id: day[j]._id },
-//                         { group: occurrenceGroup._id }
-//                     );
-//                 } else if (occurrenceTime < nOccurrenceTime) {
-//                     break;
-//                 }
-//             }
-//             i = j - 1;
-//             occurrenceGroup.occurrences = assembleGroup;
-//             occurrenceGroup.user = user;
-//             //set scheduleDate equal to the first occurrence in assembleGroup
-//             //assembleGroup should always have at least one occurrence in it
-//             occurrenceGroup.scheduledDate = new Date(
-//                 assembleGroup[0].scheduledDate.getTime()
-//             ); //save occurrence group
-
-//             //schedule job
-//             schedule.scheduleJob(
-//                 occurrenceGroup._id.toString(),
-//                 occurrenceGroup.scheduledDate,
-//                 function () {
-//                     sendNotification(occurrenceGroup._id);
-//                 }
-//             );
-//             await occurrenceGroup.save();
-//         }
-//     }
-// };
-
-const Platform = {
-    iOS: "ios",
-    Android: "android",
-};
+import User from "../models/User";
 
 /**
  * Relevant documentation:
@@ -395,7 +14,7 @@ const Platform = {
  * - https://firebase.google.com/docs/cloud-messaging/send-message - For sending android push notifications
  * @param {String} occurrenceGroupId Occurrence group id
  */
-export const sendNotification = async (occurrenceGroupId) => {
+export const sendDosageNotification = async (occurrenceGroupId) => {
     let occurrenceGroup = await OccurrenceGroup.findById(
         occurrenceGroupId
     ).populate({
@@ -429,13 +48,9 @@ export const sendNotification = async (occurrenceGroupId) => {
         let dateToFire = new Date();
         let waitingTime = 1000 * 60;
         dateToFire = new Date(dateToFire.getTime() + waitingTime);
-        schedule.scheduleJob(
-            emergencyJobId.toString(),
-            dateToFire,
-            async () => {
-                await emergencyContact(occurrenceGroup._id);
-            }
-        );
+        schedule.scheduleJob(emergencyJobId.toString(), dateToFire, () => {
+            sendEmergencyContactAlert(occurrenceGroup._id);
+        });
     }
 
     //if we shouldn't send notification, delete occurrenceGroup and return
@@ -589,7 +204,7 @@ export const sendNotification = async (occurrenceGroupId) => {
  * on it that has not been taken by the patient.
  * @param {ObjectId} occurrenceGroupId
  */
-const emergencyContact = async (occurrenceGroupId) => {
+const sendEmergencyContactAlert = async (occurrenceGroupId) => {
     let occurrenceGroup = await OccurrenceGroup.findById(
         occurrenceGroupId
     ).populate({
@@ -679,7 +294,7 @@ const emergencyContact = async (occurrenceGroupId) => {
  * returns an object with a start and end date
  * corresponding to this week
  */
-const startAndEndDateDefault = () => {
+export const startAndEndDateDefault = () => {
     //set end date to next saturday
     let endDate = new Date();
     let day = endDate.getDay();
@@ -705,7 +320,7 @@ const startAndEndDateDefault = () => {
  * Returns weekly scheduled occurrences for one medication passed in
  * as a parameter. Ensure that the medication has populated dosages.
  */
-const getScheduledMedicationDays = (med) => {
+export const getScheduledMedicationDays = (med) => {
     let week = startAndEndDateDefault();
     let startDate = week.startDate;
     let endDate = week.endDate;
@@ -779,7 +394,7 @@ const getScheduledMedicationDays = (med) => {
                 //we need to check if the weekday matches the current day
                 //and the current weekday is set to true in the database for this med
                 //we also need to make sure the date is in the day range too
-                const weekdays = Object.values(med.frequency.weekdays); // array of 7 booleans
+                const weekdays = med.frequency.weekdays;
                 if (weekdays[dateToTake.getDay()] && daysbetween - j <= days) {
                     dateToTake.setHours(0, 0, 0, 0);
                     let datesWTime = [];
@@ -830,132 +445,132 @@ const getScheduledMedicationDays = (med) => {
  * that has the specific DateTime the medication needs to be taken. It also has the
  * dosageId.
  */
-export const getScheduledDays = (user) => {
-    let week = startAndEndDateDefault();
-    let startDate = week.startDate;
-    let endDate = week.endDate;
-    let scheduledDays = [];
+// export const getScheduledDays = (user) => {
+//     let week = startAndEndDateDefault();
+//     let startDate = week.startDate;
+//     let endDate = week.endDate;
+//     let scheduledDays = [];
 
-    //get number of milliseconds between start date and end date
-    let days = endDate.getTime() - startDate.getTime();
-    //divide by number of milliseconds in one day and ceil
-    days = Math.ceil(days / (1000 * 3600 * 24));
-    //create entries in scheduledDays array for each day inbetween
-    for (let x = 0; x <= days; x++) {
-        scheduledDays.push([]);
-    }
-    if (user.medications == null) return scheduledDays;
-    for (let med of user.medications) {
-        if (!med.active) continue;
-        let start = med.dateAdded;
-        //get number of milliseconds between start date and end date
-        let daysbetween = endDate.getTime() - start.getTime();
-        //divide by number of milliseconds in one day and ceil
-        daysbetween = Math.ceil(daysbetween / (1000 * 3600 * 24));
-        //start may not be startDate so create an offset
-        let offset = 0;
-        offset = startDate.getTime() - start.getTime();
-        offset = Math.floor(offset / (1000 * 3600 * 24));
-        //loop over days from start and only include them if they are after startDate
-        if (med.frequency.intervalUnit == "days") {
-            for (let i = 0; i < daysbetween; i += med.frequency.interval) {
-                if (daysbetween - i > days + 1) {
-                    //day is before start so just continue looping
-                    continue;
-                }
-                let daysbetween_m = i * (1000 * 3600 * 24);
-                //find actual date to take medication
-                let dateToTake = new Date(start.getTime() + daysbetween_m);
-                //round down to 12 am
-                dateToTake.setHours(0, 0, 0, 0);
-                let datesWTime = [];
-                med.dosages.forEach((dosage) => {
-                    //get amount of millis to add to current dateToTake
-                    let millisToAdd =
-                        dosage.reminderTime.getHours() * 3600 * 1000;
-                    millisToAdd += dosage.reminderTime.getMinutes() * 1000 * 60;
-                    let dateWTime = new Date(
-                        dateToTake.getTime() + millisToAdd
-                    );
-                    datesWTime.push({ date: dateWTime, dosageId: dosage._id });
-                });
-                if (datesWTime.length > 0) {
-                    scheduledDays[i - offset].push({
-                        datesWTime,
-                        medicationId: med._id,
-                    });
-                }
-            }
-        } else {
-            //if the start of each week isn't Sunday, make it Sunday
-            let days_s = start.getDay();
-            if (days_s != 0) {
-                start = new Date(start.getTime() - days_s * (1000 * 3600 * 24));
-            }
+//     //get number of milliseconds between start date and end date
+//     let days = endDate.getTime() - startDate.getTime();
+//     //divide by number of milliseconds in one day and ceil
+//     days = Math.ceil(days / (1000 * 3600 * 24));
+//     //create entries in scheduledDays array for each day inbetween
+//     for (let x = 0; x <= days; x++) {
+//         scheduledDays.push([]);
+//     }
+//     if (user.medications == null) return scheduledDays;
+//     for (let med of user.medications) {
+//         if (!med.active) continue;
+//         let start = med.dateAdded;
+//         //get number of milliseconds between start date and end date
+//         let daysbetween = endDate.getTime() - start.getTime();
+//         //divide by number of milliseconds in one day and ceil
+//         daysbetween = Math.ceil(daysbetween / (1000 * 3600 * 24));
+//         //start may not be startDate so create an offset
+//         let offset = 0;
+//         offset = startDate.getTime() - start.getTime();
+//         offset = Math.floor(offset / (1000 * 3600 * 24));
+//         //loop over days from start and only include them if they are after startDate
+//         if (med.frequency.intervalUnit == "days") {
+//             for (let i = 0; i < daysbetween; i += med.frequency.interval) {
+//                 if (daysbetween - i > days + 1) {
+//                     //day is before start so just continue looping
+//                     continue;
+//                 }
+//                 let daysbetween_m = i * (1000 * 3600 * 24);
+//                 //find actual date to take medication
+//                 let dateToTake = new Date(start.getTime() + daysbetween_m);
+//                 //round down to 12 am
+//                 dateToTake.setHours(0, 0, 0, 0);
+//                 let datesWTime = [];
+//                 med.dosages.forEach((dosage) => {
+//                     //get amount of millis to add to current dateToTake
+//                     let millisToAdd =
+//                         dosage.reminderTime.getHours() * 3600 * 1000;
+//                     millisToAdd += dosage.reminderTime.getMinutes() * 1000 * 60;
+//                     let dateWTime = new Date(
+//                         dateToTake.getTime() + millisToAdd
+//                     );
+//                     datesWTime.push({ date: dateWTime, dosageId: dosage._id });
+//                 });
+//                 if (datesWTime.length > 0) {
+//                     scheduledDays[i - offset].push({
+//                         datesWTime,
+//                         medicationId: med._id,
+//                     });
+//                 }
+//             }
+//         } else {
+//             //if the start of each week isn't Sunday, make it Sunday
+//             let days_s = start.getDay();
+//             if (days_s != 0) {
+//                 start = new Date(start.getTime() - days_s * (1000 * 3600 * 24));
+//             }
 
-            //loop over weeks so multiply interval by 7
-            for (let i = 0; i < daysbetween; i += 7 * med.frequency.interval) {
-                if (daysbetween - i - 6 > days + 1) {
-                    //day is before start so continue looping
-                    continue;
-                }
-                //loop over each day of this week
-                for (let j = i; j < i + 7; j++) {
-                    let daysbetween_m = (j - i) * (1000 * 3600 * 24);
-                    let dateToTake = new Date(start.getTime() + daysbetween_m);
-                    dateToTake.setHours(23, 59, 59, 999);
+//             //loop over weeks so multiply interval by 7
+//             for (let i = 0; i < daysbetween; i += 7 * med.frequency.interval) {
+//                 if (daysbetween - i - 6 > days + 1) {
+//                     //day is before start so continue looping
+//                     continue;
+//                 }
+//                 //loop over each day of this week
+//                 for (let j = i; j < i + 7; j++) {
+//                     let daysbetween_m = (j - i) * (1000 * 3600 * 24);
+//                     let dateToTake = new Date(start.getTime() + daysbetween_m);
+//                     dateToTake.setHours(23, 59, 59, 999);
 
-                    //we need to check if the weekday matches the current day
-                    //and the current weekday is set to true in the database for this med
-                    //we also need to make sure the date is in the day range too
+//                     //we need to check if the weekday matches the current day
+//                     //and the current weekday is set to true in the database for this med
+//                     //we also need to make sure the date is in the day range too
 
-                    const weekdays = Object.values(med.frequency.weekdays); // array of 7 booleans
-                    if (
-                        weekdays[dateToTake.getDay()] &&
-                        daysbetween - j <= days
-                    ) {
-                        dateToTake.setHours(0, 0, 0, 0);
-                        let datesWTime = [];
-                        med.dosages.forEach((dosage) => {
-                            //get amount of millis to add to current dateToTake
-                            let millisToAdd =
-                                dosage.reminderTime.getHours() * 3600 * 1000;
-                            millisToAdd +=
-                                dosage.reminderTime.getMinutes() * 1000 * 60;
-                            let dateWTime = new Date(
-                                dateToTake.getTime() + millisToAdd
-                            );
-                            datesWTime.push({
-                                date: dateWTime,
-                                dosageId: dosage._id,
-                            });
-                        });
-                        if (datesWTime.length > 0) {
-                            scheduledDays[j - i].push({
-                                datesWTime,
-                                medicationId: med._id,
-                            });
-                        }
-                    }
-                }
-            }
-        }
-    }
-    //eaving prints for testing purposes
-    // let i = 0;
-    // scheduledDays.forEach(day => {
-    //     console.log("day: " + i);
-    //     day.forEach(date => {
-    //         console.log(date.medicationId);
-    //         date.datesWTime.forEach(dateWTime => {
-    //             console.log(dateWTime.date.toString());
-    //             console.log(dateWTime.dosageId);
-    //         });
-    //     });
-    //     i++;
-    // });
-    return scheduledDays;
-};
+//                     const weekdays = Object.values(med.frequency.weekdays); // array of 7 booleans
+//                     if (
+//                         weekdays[dateToTake.getDay()] &&
+//                         daysbetween - j <= days
+//                     ) {
+//                         dateToTake.setHours(0, 0, 0, 0);
+//                         let datesWTime = [];
+//                         med.dosages.forEach((dosage) => {
+//                             //get amount of millis to add to current dateToTake
+//                             let millisToAdd =
+//                                 dosage.reminderTime.getHours() * 3600 * 1000;
+//                             millisToAdd +=
+//                                 dosage.reminderTime.getMinutes() * 1000 * 60;
+//                             let dateWTime = new Date(
+//                                 dateToTake.getTime() + millisToAdd
+//                             );
+//                             datesWTime.push({
+//                                 date: dateWTime,
+//                                 dosageId: dosage._id,
+//                             });
+//                         });
+//                         if (datesWTime.length > 0) {
+//                             scheduledDays[j - i].push({
+//                                 datesWTime,
+//                                 medicationId: med._id,
+//                             });
+//                         }
+//                     }
+//                 }
+//             }
+//         }
+//     }
+//     //eaving prints for testing purposes
+//     // let i = 0;
+//     // scheduledDays.forEach(day => {
+//     //     console.log("day: " + i);
+//     //     day.forEach(date => {
+//     //         console.log(date.medicationId);
+//     //         date.datesWTime.forEach(dateWTime => {
+//     //             console.log(dateWTime.date.toString());
+//     //             console.log(dateWTime.dosageId);
+//     //         });
+//     //     });
+//     //     i++;
+//     // });
+//     return scheduledDays;
+// };
 
 /**
  * Given a populated user (with medications, dosages, and occurrences)

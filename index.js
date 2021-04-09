@@ -36,8 +36,9 @@ mongoose.connect("mongodb://localhost/MedManagerdb", {
                 "ATLBANANA",
                 (err, user) => {
                     if (err) {
-                        req.user = undefined;
-                        next();
+                        return res.status(401).json({
+                            message: err.message,
+                        });
                     } else {
                         req.user = user._id;
                         next();
@@ -50,7 +51,7 @@ mongoose.connect("mongodb://localhost/MedManagerdb", {
         }
     });
 
-    //when server reloads we must schedule all of the jobs for our
+    //when server reloads we must schedule all of the jobs
     await initServer();
 
     routes(app);

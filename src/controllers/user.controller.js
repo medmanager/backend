@@ -135,11 +135,6 @@ export const updateUserSettings = async (req, res) => {
  * Updates the users device information for notifications
  */
 export const registerDeviceKey = async (req, res) => {
-    if (req.user == null) {
-        return res.status(400).json({
-            message: "token error: cannot find user from token!",
-        });
-    }
     let token = req.body.token;
     let os = req.body.os;
     if (token == undefined || os == undefined) {
