@@ -9,7 +9,7 @@ import routes from "./src/routes";
 dotenv.config({ debug: true });
 
 const app = express();
-const PORT = 4000; // to run local
+const PORT = process.env.PORT || 4000; // to run local
 
 // mongoose connection
 mongoose.Promise = global.Promise;
