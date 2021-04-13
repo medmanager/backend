@@ -16,7 +16,7 @@ import OccurrenceGroup from "../models/OccurrenceGroup";
 import User from "../models/User";
 import { sendDosageNotification } from "./cron.controller";
 
-later.date.localTime(); // use local time
+later.date.localTime(); // use local time to generate occurrences
 
 /**
  * Gets a single occurrence

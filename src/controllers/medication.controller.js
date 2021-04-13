@@ -1,3 +1,4 @@
+import { isBefore } from "date-fns";
 import https from "https";
 import mongoose from "mongoose";
 import schedule from "node-schedule";
@@ -293,7 +294,6 @@ export const updateMedicationFromID = async (req, res) => {
         medication.amountUnit = updatedMedication.amountUnit;
         medication.color = updatedMedication.color;
         await medication.save();
-        // await medication.populate("dosages").execPopulate(); // is this line necessary?
         await createAndScheduleMedicationDosageOccurrences(medication);
     } else {
         medication.name = updatedMedication.name;
@@ -481,6 +481,12 @@ export const getMedicationTrackingInfo = async (req, res) => {
             })
             .execPopulate();
 
+        if (!user) {
+            return res.status(404).json({
+                message: "Cannot find tracking information from user",
+            });
+        }
+
         let now = new Date();
         //make sure occurrences are in range of the start and end date
         //FOR TESTING PURPOSES USE CURRENT TIME INSTEAD OF LAST 12 HOURS
@@ -493,8 +499,18 @@ export const getMedicationTrackingInfo = async (req, res) => {
         for (let med of user.medications) {
             let takenOccurrences = 0;
             let totalOccurrences = 0;
+
             for (let dosage of med.dosages.concat(med.inactiveDosages)) {
-                for (let occurrence of dosage.occurrences) {
+                const occurrences = Array.from(dosage.occurrences);
+
+                if (!dosage.active) {
+                    // if the dosage is inactive, only consider occurrences that occurred before the inactiveDate
+                    occurrences = occurrences.filter((o) =>
+                        isBefore(o.scheduledDate, dosage.inactiveDate)
+                    );
+                }
+
+                for (let occurrence of occurrences) {
                     if (
                         occurrence.scheduledDate.getTime() > last30Days &&
                         occurrence.scheduledDate.getTime() < last12Hours
@@ -517,8 +533,9 @@ export const getMedicationTrackingInfo = async (req, res) => {
         }
         return res.status(200).json(trackingArr);
     } catch (err) {
-        return res.status(404).json({
-            message: "cannot find tracking information from user!",
+        console.error(err);
+        return res.status(500).json({
+            message: "Could not get tracking info",
         });
     }
 };
