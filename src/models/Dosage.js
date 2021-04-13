@@ -34,3 +34,6 @@ export const DosageSchema = new Schema({
         type: Date,
     },
 });
+
+const Dosage = mongoose.model("Dosage", DosageSchema);
+export default Dosage;
