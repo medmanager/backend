@@ -1,6 +1,6 @@
 import https from "https";
 import mongoose from "mongoose";
-import scheduler from "node-schedule";
+import schedule from "node-schedule";
 import Dosage from "../models/Dosage";
 import Medication from "../models/Medication";
 import Occurrence from "../models/Occurrence";
@@ -9,10 +9,12 @@ import User from "../models/User";
 import { deepEqual } from "../utils";
 import {
     createAndScheduleMedicationDosageOccurrences,
-    descheduleAndDeleteFutureDosageOccurrences
+    descheduleAndDeleteFutureDosageOccurrences,
 } from "./occurrence.controller";
 
-// add a new medication
+/**
+ * Adds a new medication to the logged in user
+ */
 export const addNewMedication = async (req, res) => {
     let user;
     try {
@@ -52,11 +54,6 @@ export const addNewMedication = async (req, res) => {
             message: "cannot save medication!",
         });
     }
-
-    // // populate all the nested data onto the new medication
-    // await newMedication
-    //     .populate("dosages")
-    //     .execPopulate();
 
     try {
         await createAndScheduleMedicationDosageOccurrences(newMedication);
@@ -227,9 +224,9 @@ export const updateMedicationFromID = async (req, res) => {
     }
 
     let updatedMedication = req.body;
-    
-    // if either the dosages or frequency has changed then delete and reschedule all future occurrences
 
+    // if either the dosages or frequency has changed then delete and reschedule all future occurrences
+    // we only want to compare certain values to see if the dosages or the frequency has changed
     const dosagesToCompare = medication.dosages.map(
         ({ _id, reminderTime, dose, sendReminder }) => ({
             _id,
@@ -296,7 +293,7 @@ export const updateMedicationFromID = async (req, res) => {
         medication.amountUnit = updatedMedication.amountUnit;
         medication.color = updatedMedication.color;
         await medication.save();
-        await medication.populate("dosages").execPopulate(); // is this line necessary?
+        // await medication.populate("dosages").execPopulate(); // is this line necessary?
         await createAndScheduleMedicationDosageOccurrences(medication);
     } else {
         medication.name = updatedMedication.name;
@@ -309,106 +306,6 @@ export const updateMedicationFromID = async (req, res) => {
     }
 
     return res.status(200).json(medication);
-
-    // for (let newDosage of updatedMed.dosages) {
-    //     for (let dosage of medication.dosages) {
-    //         if (deepEqual(dosage, newDosage)) {
-    //             unchangedDosages.push(dosage);
-    //         } else if (dosage._id.toString() == newDosage._id) {
-    //             changedDosages.push(dosage);
-    //         } else {
-    //             newDosages.push(newDosage);
-    //         }
-    //     }
-    //     // if (!added) {
-    //     //     if ("_id" in newDosage) {
-    //     //         delete newDosage._id;
-    //     //     }
-    //     //     newDosages.push(newDosage);
-    //     // }
-    // }
-
-    // for (let dosage of medication.dosages) {
-    //     let index1 = changedDosages.findIndex(
-    //         (d) => d._id == dosage._id.toString()
-    //     );
-    //     let index2 = unchangedDosages.findIndex(
-    //         (d) => d._id == dosage._id.toString()
-    //     );
-    //     if (index1 == -1 && index2 == -1) {
-    //         oldDosages.push(dosage);
-    //     }
-    // }
-
-    // for (let dosage of changedDosages) {
-    //     await Dosage.findByIdAndUpdate(dosage._id, {
-    //         dose: dosage.dose,
-    //         sendReminder: dosage.sendReminder,
-    //         reminderTime: dosage.reminderTime,
-    //     });
-    // }
-
-    // let now = new Date();
-    // for (let dosage of oldDosages) {
-    //     await Dosage.findByIdAndUpdate(dosage._id, {
-    //         active: false,
-    //         inactiveDate: now,
-    //     });
-    // }
-
-    // newDosages = newDosages.map((dosage) => {
-    //     dosage = new Dosage(dosage);
-    //     dosage.medication = medication._id;
-    //     return dosage;
-    // });
-    // console.log({ newDosages });
-    // console.log({ unchangedDosages });
-    // console.log({ changedDosages });
-    // console.log({ oldDosages });
-
-    // if (newDosages.length > 0) {
-    //     await Dosage.insertMany(newDosages);
-    // }
-
-    // let dosagesToInvalidate = changedDosages;
-    // dosagesToInvalidate = dosagesToInvalidate.concat(oldDosages);
-
-    // if (!deepEqual(medication.frequency, updatedMedication.frequency)) {
-    //     dosagesToInvalidate = dosagesToInvalidate.concat(unchangedDosages);
-    // }
-
-    // const dosageIdsToInvalidate = dosagesToInvalidate.map(
-    //     (dosage) => dosage._id
-    // );
-    // descheduleAndDeleteFutureOccurrences(dosageIdsToInvalidate);
-
-    // let activeDosageIds = changedDosages;
-    // activeDosageIds = activeDosageIds.concat(newDosages);
-    // let dosagesToSchedule = activeDosageIds;
-    // activeDosageIds = activeDosageIds.concat(unchangedDosages);
-
-    // // if (medication.inactiveDosages == null) {
-    // //     medication.inactiveDosages = oldDosages;
-    // // } else {
-    // //     medication.inactiveDosages = medication.inactiveDosages.concat(
-    // //         oldDosages
-    // //     );
-    // // }
-    // // console.log({ activeDosageIds });
-
-    // medication.dosages = activeDosageIds;
-    // medication.name = updatedMedication.name;
-    // medication.strength = updatedMedication.strength;
-    // medication.strengthUnit = updatedMedication.strengthUnit;
-    // medication.amount = updatedMedication.amount;
-    // medication.amountUnit = updatedMedication.amountUnit;
-    // medication.frequency = updatedMedication.frequency;
-    // medication.color = updatedMedication.color;
-    // await Medication.updateOne({ _id: medication.id }, medication);
-
-    // await medication.populate("dosages").execPopulate();
-    // await scheduleDosages(medication, dosagesToSchedule, medication.user);
-    // return res.status(200).json(medication);
 };
 
 /**
@@ -461,7 +358,7 @@ export const deleteMedicationFromID = async (req, res) => {
         for (let [groupId, occurrenceIds] of Object.entries(groupsToRemove)) {
             // two cases:
             // case one: The group has only these occurrence ids in it. In that case, delete and deschedule the group.
-            // case two: The group has other occurrences from other medication in it. Update the groups occurrences by deleting them from the array
+            // case two: The group has other occurrences from other medications in it. Update the groups occurrences by deleting them from the array
 
             const groupObjectId = mongoose.Types.ObjectId(groupId);
             const group = await OccurrenceGroup.findById(groupObjectId);
@@ -477,8 +374,8 @@ export const deleteMedicationFromID = async (req, res) => {
                 )
             ) {
                 // deschedule and delete the group
-                if (groupId in scheduler.scheduledJobs) {
-                    const job = scheduler.scheduledJobs[groupId];
+                if (groupId in schedule.scheduledJobs) {
+                    const job = schedule.scheduledJobs[groupId];
                     if (job) {
                         job.cancel();
                     }
@@ -516,121 +413,12 @@ export const deleteMedicationFromID = async (req, res) => {
         console.log(err);
         return res.status(500).json({ message: "Could not delete medication" });
     }
-
-    //ensure user has permission to delete this medication
-    // let medicationToRemove = await Medication.findById(
-    //     req.params.medicationID,
-    //     (err, medication) => {
-    //         if (err) {
-    //             return res.status(404).json({
-    //                 message: "cannot find medication!",
-    //             });
-    //         } else if (!medication) {
-    //             return res
-    //                 .status(404)
-    //                 .json({ message: "Medication not found" });
-    //         } else if (!medication.user.equals(req.user)) {
-    //             return res.status(404).json({
-    //                 message: "user not authorized to delete this medication!",
-    //             });
-    //         }
-    //     }
-    // );
-
-    // try {
-    //     let dosagesToRemove = await Dosage.find({
-    //         _id: {
-    //             $in: medicationToRemove.dosages.concat(
-    //                 medicationToRemove.inactiveDosages
-    //             ),
-    //         },
-    //     });
-
-    //     //for each dosage, delete occurrences and create occurrenceGroup array
-    //     let occurrencesToRemove = [];
-    //     let occurrenceGroupsToRemove = [];
-    //     for (let dosage of dosagesToRemove) {
-    //         let occurrences = await Occurrence.find({
-    //             _id: { $in: dosage.occurrences },
-    //         });
-    //         for (let occurrence of occurrences) {
-    //             if (occurrenceGroupsToRemove.indexOf(occurrence.group) == -1) {
-    //                 occurrenceGroupsToRemove.push(occurrence.group);
-    //             }
-    //         }
-    //         occurrencesToRemove.concat(occurrences);
-    //     }
-
-    //     await occurrenceGroupsToRemove.populate("occurrences").execPopulate();
-    //     //iterate over occurrenceGroups and delete groups that only have one occurrence
-    //     for (let group of occurrenceGroupsToRemove) {
-    //         if (group.occurrences.length == 1) {
-    //             const key = group._id.toString();
-    //             //if job exists, then cancel it!
-    //             if (key in scheduler.scheduledJobs) {
-    //                 const job = scheduler.scheduledJobs[key];
-    //                 if (job != undefined) {
-    //                     job.cancel();
-    //                 }
-    //             }
-    //             await OccurrenceGroup.deleteOne({
-    //                 _id: group._id,
-    //             });
-    //         } else {
-    //             for (let occurrence of occurrencesToRemove) {
-    //                 let indexOfOccToRemove = occurrenceGroup.occurrences.findIndex(
-    //                     (occ) => occ.equals(occurrence._id)
-    //                 );
-    //                 if (indexOfOccToRemove != -1) {
-    //                     occurrenceGroup.occurrences.splice(
-    //                         indexOfOccToRemove,
-    //                         1
-    //                     );
-    //                 }
-    //             }
-    //             //if the occurrence group no longer has any meds just delete it
-    //             //otherwise save the new group
-    //             if (group.occurrences.length > 0) {
-    //                 await OccurrenceGroup.deleteOne({ _id: group._id });
-    //             } else {
-    //                 await group.save();
-    //             }
-    //         }
-    //     }
-
-    //     await Occurrence.deleteMany({ _id: { $in: occurrencesToRemove } });
-
-    //     await Dosage.deleteMany({
-    //         _id: {
-    //             $in: medicationToRemove.dosages.concat(
-    //                 medicationToRemove.inactiveDosages
-    //             ),
-    //         },
-    //     });
-    //     await Medication.deleteOne({ _id: medicationToRemove._id });
-    //     //find the user and delete the medication reference
-    //     let user = await User.findById(medicationToRemove.user);
-    //     let index = user.medications.findIndex((med) =>
-    //         med.equals(medicationToRemove._id)
-    //     );
-    //     if (index != -1) {
-    //         user.medications.splice(index, 1);
-    //     }
-    //     user.save();
-    //     return res
-    //         .status(200)
-    //         .json({ message: "Successfully deleted medication!" });
-    // } catch (err) {
-    //     console.log(err);
-    //     return res.status(404).json({ message: "Cannot delete medication!" });
-    // }
 };
 
 export const fuzzySearchMedicationName = (req, res) => {
     let searchStr = req.params.searchStr;
-    //console.log("REST/spellingsuggestions.json?name=" + searchStr);
 
-    const req2 = https.request(
+    const searchRequest = https.request(
         {
             hostname: "rxnav.nlm.nih.gov",
             path:
@@ -671,10 +459,10 @@ export const fuzzySearchMedicationName = (req, res) => {
             });
         }
     );
-    req2.on("error", (error) => {
+    searchRequest.on("error", (error) => {
         return res.send(error);
     });
-    req2.end();
+    searchRequest.end();
 };
 
 export const getMedicationTrackingInfo = async (req, res) => {

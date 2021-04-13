@@ -1,13 +1,10 @@
 /**
  * Recursively check equality between two objects
- * @param {*} first
- * @param {*} second
- * @param {String[]} invalidKeys List of invalid object keys to consider when comparing
+ * @param {*} first First object
+ * @param {*} second Second object
  * @returns true or false
  */
-export const deepEqual = (first, second, invalidKeys = ["_id", "__v"]) => {
-    const filterFn = (key) => !invalidKeys.includes(key);
-
+export const deepEqual = (first, second) => {
     const firstType = typeof first,
         secondType = typeof second;
 
@@ -17,9 +14,7 @@ export const deepEqual = (first, second, invalidKeys = ["_id", "__v"]) => {
         Array.isArray(second) &&
         first.length === second.length
     ) {
-        return first.every((obj, idx) =>
-            deepEqual(obj, second[idx], invalidKeys)
-        );
+        return first.every((obj, idx) => deepEqual(obj, second[idx]));
     }
 
     // first is Date, second is date string
@@ -53,11 +48,10 @@ export const deepEqual = (first, second, invalidKeys = ["_id", "__v"]) => {
     // both are objects
     if (firstType === "object" && firstType === secondType) {
         return (
-            Object.keys(first).filter(filterFn).length ===
-                Object.keys(second).filter(filterFn).length &&
-            Object.keys(first)
-                .filter(filterFn)
-                .every((key) => deepEqual(first[key], second[key], invalidKeys))
+            Object.keys(first).length === Object.keys(second).length &&
+            Object.keys(first).every((key) =>
+                deepEqual(first[key], second[key])
+            )
         );
     }
 

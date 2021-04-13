@@ -1,15 +1,22 @@
-import { endOfWeek, isAfter, isBefore, startOfWeek } from "date-fns";
+import {
+    differenceInDays,
+    endOfWeek,
+    isAfter,
+    isBefore,
+    startOfWeek,
+} from "date-fns";
+import dayjs from "dayjs";
+import later from "later";
 import _ from "lodash";
-import scheduler from "node-schedule";
+import schedule from "node-schedule";
 import Dosage from "../models/Dosage";
 import Medication from "../models/Medication";
 import Occurrence from "../models/Occurrence";
 import OccurrenceGroup from "../models/OccurrenceGroup";
 import User from "../models/User";
-import {
-    getScheduledMedicationDays,
-    sendDosageNotification,
-} from "./cron.controller";
+import { sendDosageNotification } from "./cron.controller";
+
+later.date.localTime(); // use local time
 
 /**
  * Gets a single occurrence
@@ -38,10 +45,7 @@ export const getOccurrenceFromID = async (req, res) => {
 };
 
 /**
- * Function to get weekly occurrences of all medications
- * 2 parameters in body:
- * @param startDate : DateTime object containing start date to find occurrences for
- * @param endDate : DateTime object marking the end date in the range of the occurrences
+ * Function to get a users weekly medication occurrences
  */
 export const getOccurrences = async (req, res) => {
     const userId = req.user;
@@ -156,8 +160,8 @@ export const takeDosageOccurrence = async (req, res) => {
                     if (occurrenceGroup.occurrences.length <= 1) {
                         const key = occurrenceGroup._id.toString();
                         //if job exists, then cancel it!
-                        if (key in scheduler.scheduledJobs) {
-                            const job = scheduler.scheduledJobs[key];
+                        if (key in schedule.scheduledJobs) {
+                            const job = schedule.scheduledJobs[key];
                             if (job != undefined) {
                                 job.cancel();
                             }
@@ -233,20 +237,115 @@ export const getOccurrenceGroupFromID = async (req, res) => {
 };
 
 /**
- * Helper function that schedules all the occurrence groups (that are scheduled in the future) in the db
+ * Gets the current weeks occurrences for a given medication. Ensure that the medication
+ * document passed in has populated dosages.
+ *
+ * @param {*} medication Medication document or object
+ * @param {*} startDate Start date to consider when getting the occurrences. Default value is the start of the current week.
+ * @param {*} endDate End date to consider when getting the occurrences. Default value is the end of the current week.
+ * @returns Occurrences list
  */
-export const scheduleOccurrenceGroups = async () => {
-    let groupsToSchedule = await OccurrenceGroup.find({
-        scheduledDate: {
-            $gte: new Date(),
-        },
-    }).exec();
-    for (let group of groupsToSchedule) {
-        // schedule notification jobs for the week
-        scheduler.scheduleJob(group._id.toString(), group.scheduledDate, () => {
-            sendDosageNotification(group._id);
-        });
+export const getMedicationOccurrences = (
+    medication,
+    startDate = startOfWeek(new Date()),
+    endDate = endOfWeek(new Date())
+) => {
+    let occurrences = [];
+    if (medication == null) return occurrences;
+
+    const frequency = medication.frequency;
+    let weekdays = frequency.weekdays;
+    if ("_id" in weekdays) {
+        delete weekdays._id;
     }
+
+    // sort the frequency weekdays so that Sunday comes first and Saturday is last
+    const weekdaySorter = {
+        sunday: 0,
+        monday: 1,
+        tuesday: 2,
+        wednesday: 3,
+        thursday: 4,
+        friday: 5,
+        saturday: 6,
+    };
+    let tmpSortedWeekdays = []; // temporarly holds the ordered weekday objects
+    for (const key of Object.keys(weekdaySorter)) {
+        const value = weekdays[key];
+        const index = weekdaySorter[key.toLowerCase()];
+        tmpSortedWeekdays[index] = {
+            key: key,
+            value: value,
+        };
+    }
+    const sortedWeekdays = {};
+    tmpSortedWeekdays.forEach((obj) => {
+        sortedWeekdays[obj.key] = obj.value;
+    });
+
+    // sorted weekdays should now have weekday keys sorted by the order of the week starting on Sunday
+
+    const weekdayValues = Object.values(sortedWeekdays);
+    const weekdayIndices = weekdayValues.flatMap((bool, index) =>
+        typeof bool === "boolean" && bool ? index + 1 : []
+    );
+
+    if (!medication.dosages || !Array.isArray(medication.dosages)) {
+        return occurrences;
+    }
+
+    for (const dosage of medication.dosages) {
+        const dosageReminderTime = dayjs(dosage.reminderTime);
+        const dosageTime = dosageReminderTime.format("HH:mm");
+
+        let dosageRecurrence;
+
+        // define the dosage recurrence generator
+        if (frequency.intervalUnit === "days") {
+            // we need a recurrence value that is daily (once, twice, etc.) based on the interval
+            dosageRecurrence = later.parse
+                .recur()
+                .every(frequency.interval)
+                .dayOfWeek()
+                .on(dosageTime)
+                .time();
+        } else if (frequency.intervalUnit === "weeks") {
+            // we need a recurrence value that is weekly (also accounts for bi-weekly and interval values > 1) based on
+            // the interval AND is on the specified weekdays
+
+            dosageRecurrence = later.parse
+                .recur()
+                .every(frequency.interval)
+                .weekOfYear()
+                .on(...weekdayIndices)
+                .dayOfWeek()
+                .on(dosageTime)
+                .time();
+        } else {
+            console.log(
+                `Got unexpected frequency interval unit: ${frequency.intervalUnit}.`
+            );
+            break;
+        }
+
+        const dosageSchedule = later.schedule(dosageRecurrence);
+        const dosageOccurrences = dosageSchedule.next(-1, startDate, endDate);
+
+        if (!dosageOccurrences) {
+            return occurrences;
+        }
+
+        for (const occurrence of dosageOccurrences) {
+            occurrences.push({
+                dosageId: dosage._id,
+                occurrence,
+            });
+        }
+    }
+
+    // sort occurrences so that they are ordered based on the time they will occur
+    occurrences.sort((a, b) => a.occurrence.getTime() - b.occurrence.getTime());
+    return occurrences;
 };
 
 /**
@@ -259,30 +358,26 @@ export const createAndScheduleMedicationDosageOccurrences = async (
     medication
 ) => {
     const user = medication.user;
-    let weeklyOccurrences = getScheduledMedicationDays(medication);
+    let occurrences = getMedicationOccurrences(medication);
     let occurrenceObjects = [];
     const now = new Date();
 
-    for (let day of weeklyOccurrences) {
-        for (let medication of day) {
-            for (let dose of medication.datesWTime) {
-                // ensure that the occurrence hasn't already passed
-                if (isAfter(dose.date, now)) {
-                    // create occurrence object
-                    let occurrence = {
-                        isTaken: false,
-                        timeTaken: null,
-                        scheduledDate: dose.date,
-                        dosage: dose.dosageId,
-                    };
-                    let doseObject = await Dosage.findById(dose.dosageId);
-                    let occurrenceObject = new Occurrence(occurrence);
-                    await occurrenceObject.save();
-                    doseObject.occurrences.push(occurrenceObject);
-                    await doseObject.save();
-                    occurrenceObjects.push(occurrenceObject);
-                }
-            }
+    for (const { occurrence, dosageId } of occurrences) {
+        // ensure that the occurrence hasn't already passed
+        if (isAfter(occurrence, now)) {
+            // find dose object
+            const dose = await Dosage.findById(dosageId);
+            // create occurrence object
+            let occurrenceObject = new Occurrence({
+                isTaken: false,
+                timeTaken: null,
+                scheduledDate: occurrence,
+                dosage: dosageId,
+            });
+            await occurrenceObject.save();
+            dose.occurrences.push(occurrenceObject);
+            await dose.save();
+            occurrenceObjects.push(occurrenceObject);
         }
     }
 
@@ -293,12 +388,11 @@ export const createAndScheduleMedicationDosageOccurrences = async (
     for (let [groupScheduledDateTime, occurrences] of Object.entries(
         groupedOccurrences
     )) {
-        // filter out occurrences that have already been taken
-        occurrences = occurrences.filter((o) => !o.isTaken);
         const groupScheduledDate = new Date(Number(groupScheduledDateTime));
 
         let occurrenceGroup = await OccurrenceGroup.findOne({
             scheduledDate: groupScheduledDate,
+            user,
         }); // could be null
 
         if (occurrenceGroup) {
@@ -312,12 +406,10 @@ export const createAndScheduleMedicationDosageOccurrences = async (
             occurrenceGroup = new OccurrenceGroup();
             occurrenceGroup.occurrences = occurrences;
             occurrenceGroup.user = user;
-            occurrenceGroup.scheduledDate = new Date(
-                Number(groupScheduledDateTime)
-            );
+            occurrenceGroup.scheduledDate = groupScheduledDate;
             await occurrenceGroup.save();
 
-            scheduler.scheduleJob(
+            schedule.scheduleJob(
                 occurrenceGroup._id.toString(),
                 occurrenceGroup.scheduledDate,
                 () => {
@@ -335,8 +427,9 @@ export const createAndScheduleMedicationDosageOccurrences = async (
 };
 
 /**
- * Helper function to create weekly dosage occurrences for all medications
- * This function should be called weekly on Sunday at 0:00
+ * Helper function to create weekly dosage occurrences for all medications in the database.
+ * This function should only be called once a week on Sunday at 0:00 (or after if the server was not running).
+ * NOTE: It may take a while to run if the db has a lot of active medications.
  */
 export const createAndScheduleWeeklyOccurrences = async () => {
     console.log(
@@ -346,7 +439,7 @@ export const createAndScheduleWeeklyOccurrences = async () => {
         `Found ${await OccurrenceGroup.countDocuments().exec()} occurrence groups in the DB`
     );
 
-    console.log("Deleting all the occurrence groups which never fired...");
+    console.log("Deleting all the past occurrence groups...");
     // delete past all the occurrence groups which are before the current time
     const deleteResult = await OccurrenceGroup.deleteMany({
         scheduledDate: {
@@ -363,7 +456,9 @@ export const createAndScheduleWeeklyOccurrences = async () => {
 
     for (let medication of medications) {
         if (medication.active) {
-            console.log(`Creating occurrences for ${medication.name}...`);
+            console.log(
+                `Creating weekly occurrences for ${medication.name}...`
+            );
             await createAndScheduleMedicationDosageOccurrences(medication);
             console.log(`Done creating occurrences for ${medication.name}`);
         }
@@ -376,16 +471,16 @@ export const createAndScheduleWeeklyOccurrences = async () => {
  * in the database to send. Formats them into an array of days containing an array of
  * occurrences where each occurrence has a medicationId, dosageId, and occurrence (from Dosage model)
  *
- * Right now the function is not dynamic and only gives occurrences for the current week
+ * @param {*} user User document or object
  */
-export const getWeeklyOccurrences = (user) => {
-    const date = new Date();
-    const startDate = startOfWeek(date);
-    const endDate = endOfWeek(date);
-
-    //create entries in scheduledDays array for each day inbetween
+export const getWeeklyOccurrences = (
+    user,
+    startDate = startOfWeek(new Date()),
+    endDate = endOfWeek(new Date())
+) => {
     let scheduledDays = [];
-    for (let x = 0; x < 7; x++) {
+    let numberOfDays = differenceInDays(endDate, startDate); // will be a value between 0-7
+    for (let x = 0; x <= numberOfDays; x++) {
         scheduledDays.push([]);
     }
 
@@ -462,8 +557,8 @@ export const descheduleAndDeleteFutureDosageOccurrences = async (
             if (group.occurrences.length == 1) {
                 const key = group._id.toString();
                 //if job exists, then cancel it!
-                if (key in scheduler.scheduledJobs) {
-                    const job = scheduler.scheduledJobs[key];
+                if (key in schedule.scheduledJobs) {
+                    const job = schedule.scheduledJobs[key];
                     if (job != undefined) {
                         job.cancel();
                     }

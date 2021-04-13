@@ -1,10 +1,8 @@
 import { isBefore, startOfWeek } from "date-fns";
-import scheduler from "node-schedule";
+import schedule from "node-schedule";
 import { DEBUG_CREATE_WEEKLY_OCCURRENCES } from "./constants";
-import {
-    createAndScheduleWeeklyOccurrences,
-    scheduleOccurrenceGroups,
-} from "./controllers/occurrence.controller";
+import { scheduleAllOccurrenceGroups } from "./controllers/cron.controller";
+import { createAndScheduleWeeklyOccurrences } from "./controllers/occurrence.controller";
 import Metadata from "./models/Metadata";
 
 export const initServer = async () => {
@@ -38,17 +36,21 @@ export const initServer = async () => {
         );
     } else {
         console.log("Scheduling occurrence groups...");
-        await scheduleOccurrenceGroups();
+        await scheduleAllOccurrenceGroups();
         console.log(
-            `Scheduled ${Object.entries(scheduler.scheduledJobs).length} jobs!`
+            `Scheduled ${Object.entries(schedule.scheduledJobs).length} jobs!`
         );
     }
 
     console.log("Scheduling weekly server job...");
     let time = "0 0 * * 0"; // run every week at the start of each Sunday
-    scheduler.scheduleJob(
-        "serverCreateWeeklyOccurrences",
-        time,
-        createAndScheduleWeeklyOccurrences
-    );
+    schedule.scheduleJob("serverCreateWeeklyOccurrences", time, async () => {
+        console.log("Running serverCreateWeeklyOccurrences job...");
+        await createAndScheduleWeeklyOccurrences();
+        await Metadata.findOneAndUpdate(
+            { name: "MedManager" },
+            { lastScheduledAt: new Date() },
+            { upsert: true }
+        );
+    });
 };
