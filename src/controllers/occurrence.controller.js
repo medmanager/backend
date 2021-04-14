@@ -254,7 +254,7 @@ export const getMedicationOccurrences = (
     if (medication == null) return occurrences;
 
     const frequency = medication.frequency;
-    let weekdays = frequency.weekdays;
+    let weekdays = frequency.weekdays || {};
     if ("_id" in weekdays) {
         delete weekdays._id;
     }

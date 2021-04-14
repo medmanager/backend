@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const Schema = mongoose.Schema;
 
-const WeekdaySchema = new Schema({
+export const WeekdaySchema = new Schema({
     monday: {
         type: Boolean,
         default: false,

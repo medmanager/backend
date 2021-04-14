@@ -26,8 +26,11 @@ import {
     updateUserSettings,
     verify,
 } from "./controllers/user.controller";
+import { seed } from "./seed";
 
 const routes = (app) => {
+    app.route("/seedDatabase").post(seed);
+
     app.route("/medication")
         .get(loginRequired, getMedications)
         .post(loginRequired, addNewMedication);
