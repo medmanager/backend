@@ -367,17 +367,25 @@ export const createAndScheduleMedicationDosageOccurrences = async (
         if (isAfter(occurrence, now)) {
             // find dose object
             const dose = await Dosage.findById(dosageId);
-            // create occurrence object
-            let occurrenceObject = new Occurrence({
-                isTaken: false,
-                timeTaken: null,
-                scheduledDate: occurrence,
+            const existingOccurrence = await Occurrence.findOne({
                 dosage: dosageId,
+                scheduledDate: occurrence,
             });
-            await occurrenceObject.save();
-            dose.occurrences.push(occurrenceObject);
-            await dose.save();
-            occurrenceObjects.push(occurrenceObject);
+
+            // ensure that duplicated occurrences are not created
+            if (!existingOccurrence) {
+                // create occurrence object
+                let occurrenceObject = new Occurrence({
+                    isTaken: false,
+                    timeTaken: null,
+                    scheduledDate: occurrence,
+                    dosage: dosageId,
+                });
+                await occurrenceObject.save();
+                dose.occurrences.push(occurrenceObject);
+                await dose.save();
+                occurrenceObjects.push(occurrenceObject);
+            }
         }
     }
 
@@ -593,9 +601,9 @@ export const descheduleAndDeleteFutureDosageOccurrences = async (
             }
         );
         //remove the deleted occurrences from the dosage
-        dosage.occurrences = dosage.occurrences.filter((occ) => {
-            -1 != occurrencesToRemove.findIndex((occu) => occu._id == occ._id);
-        });
+        // dosage.occurrences = dosage.occurrences.filter((occ) => {
+        //     -1 != occurrencesToRemove.findIndex((occu) => occu._id == occ._id);
+        // });
 
         await Dosage.updateOne({ _id: dosage._id }, dosage);
     }
