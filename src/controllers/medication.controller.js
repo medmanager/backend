@@ -1,4 +1,3 @@
-import { isBefore } from "date-fns";
 import https from "https";
 import mongoose from "mongoose";
 import schedule from "node-schedule";
@@ -490,7 +489,7 @@ export const getMedicationTrackingInfo = async (req, res) => {
         let now = new Date();
         //make sure occurrences are in range of the start and end date
         //FOR TESTING PURPOSES USE CURRENT TIME INSTEAD OF LAST 12 HOURS
-        let last12Hours = now;
+        let last12Hours = now.getTime();
         //let last12Hours = now.getTime() - 1000 * 3600 * 12;
         let last30Days = now.getTime() - 1000 * 3600 * 24 * 30;
         //array of medication objects that have an id, name, and compliance value
@@ -503,23 +502,32 @@ export const getMedicationTrackingInfo = async (req, res) => {
             for (let dosage of med.dosages.concat(med.inactiveDosages)) {
                 const occurrences = Array.from(dosage.occurrences);
 
-                if (!dosage.active) {
-                    // if the dosage is inactive, only consider occurrences that occurred before the inactiveDate
-                    occurrences = occurrences.filter((o) =>
-                        isBefore(o.scheduledDate, dosage.inactiveDate)
-                    );
-                }
+                // if (!dosage.active) {
+                //     // if the dosage is inactive, only consider occurrences that occurred before the inactiveDate
+                //     occurrences = occurrences.filter((o) =>
+                //         isBefore(o.scheduledDate, dosage.inactiveDate)
+                //     );
+                // }
 
                 for (let occurrence of occurrences) {
                     if (
                         occurrence.scheduledDate.getTime() > last30Days &&
                         occurrence.scheduledDate.getTime() < last12Hours
                     ) {
+                        // only consider occurrences which have had time to happen and are within the last 30 days
                         totalOccurrences++;
                         if (occurrence.isTaken) takenOccurrences++;
+                    } else if (
+                        occurrence.scheduledDate.getTime() > last30Days &&
+                        occurrence.isTaken
+                    ) {
+                        // this handles the case when the occurrence was taken early and is within the last 30 days
+                        takenOccurrences++;
+                        totalOccurrences++;
                     }
                 }
             }
+
             //don't want to get a divide by zero exception
             //also it's not necessary to include medication in tracking
             //array if there aren't any occurrences in the time frame
