@@ -126,8 +126,6 @@ const user = {
 };
 
 export const seed = async (req, res) => {
-    const { token, os } = req.body;
-
     await User.remove({});
     await Dosage.remove({});
     await Medication.remove({});
@@ -136,15 +134,12 @@ export const seed = async (req, res) => {
 
     const newUser = new User(user);
     const defaultSettings = new Settings();
-    newUser.deviceInfo = {
-        token,
-        os,
-    };
     newUser.hashPassword = bcrypt.hashSync(user.password, 10);
     newUser.settings = defaultSettings;
 
     const medOne = new Medication(spironolactone);
     const dosageOne = new Dosage(dosage9PM);
+    dosageOne.medication = medOne._id;
     await createOccurrences(dosageOne, 20);
     medOne.dosages.push(dosageOne);
     medOne.user = newUser._id;
@@ -153,6 +148,7 @@ export const seed = async (req, res) => {
 
     const medTwo = new Medication(farxiga);
     const dosageTwo = new Dosage(dosage9PM);
+    dosageTwo.medication = medTwo._id;
     await createOccurrences(dosageTwo, 30);
     medTwo.dosages.push(dosageTwo);
     medTwo.user = newUser._id;
@@ -161,6 +157,7 @@ export const seed = async (req, res) => {
 
     const medThree = new Medication(aspirin);
     const dosageThree = new Dosage(dosage9PM);
+    dosageThree.medication = medThree._id;
     await createOccurrences(dosageThree, 12);
     medThree.dosages.push(dosageThree);
     medThree.user = newUser._id;
@@ -169,6 +166,7 @@ export const seed = async (req, res) => {
 
     const medFour = new Medication(alendronate);
     const dosageFour = new Dosage(dosage7PM);
+    dosageFour.medication = medFour._id;
     await createOccurrences(dosageFour, 30);
     medFour.dosages.push(dosageFour);
     medFour.user = newUser._id;
