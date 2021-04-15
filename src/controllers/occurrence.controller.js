@@ -72,7 +72,7 @@ export const getOccurrences = async (req, res) => {
             path: "medications",
             model: "Medication",
             populate: {
-                path: "dosages",
+                path: "dosages inactiveDosages",
                 populate: {
                     path: "occurrences",
                     model: "Occurrence",
@@ -173,7 +173,7 @@ export const takeDosageOccurrence = async (req, res) => {
                         //if there are multiple occurrences,
                         //remove index of posted occurrence
                         let indexOfOccToRemove = occurrenceGroup.occurrences.findIndex(
-                            (occ) => occ.equals(occurrenceToUpdate._id)
+                            (occ) => occ._id.equals(occurrenceToUpdate._id)
                         );
                         if (indexOfOccToRemove != -1) {
                             occurrenceGroup.occurrences.splice(
@@ -511,6 +511,25 @@ export const getWeeklyOccurrences = (
                 }
             });
         });
+
+        // we should also consider past occurrences that were scheduled from previously active dosages
+        // that ended up being taken
+        med.inactiveDosages.forEach((dose) => {
+            dose.occurrences.forEach((occurrence) => {
+                if (
+                    isAfter(occurrence.scheduledDate, startDate) &&
+                    isBefore(occurrence.scheduledDate, endDate) &&
+                    occurrence.isTaken
+                ) {
+                    const day = occurrence.scheduledDate.getDay();
+                    scheduledDays[day].push({
+                        medicationId: med._id,
+                        dosageId: dose._id,
+                        occurrence: occurrence,
+                    });
+                }
+            });
+        });
     });
 
     // const today = new Date().getDay();
@@ -556,8 +575,11 @@ export const descheduleAndDeleteFutureDosageOccurrences = async (
             }
         }
 
+        const occurrenceGroupIdsToRemove = occurrenceGroupsToRemove.map(
+            (o) => o._id
+        );
         occurrenceGroupsToRemove = await OccurrenceGroup.find({
-            _id: { $in: occurrenceGroupsToRemove },
+            _id: { $in: occurrenceGroupIdsToRemove },
         }).populate("occurrences");
 
         //iterate over occurrenceGroups and delete groups that only have one occurrence
@@ -578,7 +600,7 @@ export const descheduleAndDeleteFutureDosageOccurrences = async (
                 //TODO: FILTER OCCURRENCES TO BE REMOVED FROM GROUP AND DELETE GROUP IF NECESSARY
                 for (let occurrence of occurrencesToRemove) {
                     let indexOfOccToRemove = group.occurrences.findIndex(
-                        (occ) => occ.equals(occurrence._id)
+                        (occ) => occ._id.equals(occurrence._id)
                     );
                     if (indexOfOccToRemove != -1) {
                         group.occurrences.splice(indexOfOccToRemove, 1);
@@ -594,8 +616,9 @@ export const descheduleAndDeleteFutureDosageOccurrences = async (
             }
         }
 
+        const occurrenceIdsToRemove = occurrencesToRemove.map((o) => o._id);
         await Occurrence.deleteMany(
-            { _id: { $in: occurrencesToRemove } },
+            { _id: { $in: occurrenceIdsToRemove } },
             (err) => {
                 if (err) console.log("error deleting occurrences");
             }

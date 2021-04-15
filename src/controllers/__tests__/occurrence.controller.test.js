@@ -22,7 +22,7 @@ test("correctly gets occurrences for a weekly medication on Friday", () => {
                 _id: "asdasdasd",
                 dose: 1,
                 sendReminder: true,
-                reminderTime: new Date("April 11, 21 21:00:00"), // Fridays at 9pm
+                reminderTime: new Date("April 11, 21 21:00:00"), // 9pm
             },
         ],
         dateAdded: new Date(),
@@ -57,7 +57,7 @@ test("correctly gets occurrences for a weekly medication on Saturday", () => {
                 _id: "asdasdasd",
                 dose: 1,
                 sendReminder: true,
-                reminderTime: new Date("April 11, 21 21:00:00"), // Fridays at 9pm
+                reminderTime: new Date("April 11, 21 21:00:00"), // 9pm
             },
         ],
         dateAdded: new Date(),
@@ -66,7 +66,7 @@ test("correctly gets occurrences for a weekly medication on Saturday", () => {
     const occurrences = getMedicationOccurrences(medication);
     expect(occurrences.length).toBe(1);
     const firstOccurrence = occurrences[0];
-    expect(firstOccurrence.occurrence.getDay()).toBe(6); // occurs on Friday
+    expect(firstOccurrence.occurrence.getDay()).toBe(6); // occurs on Saturday
     expect(firstOccurrence.occurrence.getHours()).toBe(21); // happens at 9 PM
     expect(firstOccurrence.occurrence.getMinutes()).toBe(0);
 });
@@ -93,7 +93,7 @@ test("correctly gets occurrences for a weekly medication with multiple days sele
                 _id: "asdasdasd",
                 dose: 1,
                 sendReminder: true,
-                reminderTime: new Date("April 11, 21 21:00:00"), // Fridays at 9pm
+                reminderTime: new Date("April 11, 21 21:00:00"), // 9pm
             },
         ],
         dateAdded: new Date(),
@@ -130,7 +130,7 @@ test("correctly gets occurrences for a daily medication", () => {
                 _id: "asdasdasd",
                 dose: 1,
                 sendReminder: true,
-                reminderTime: new Date("April 11, 21 21:00:00"), // everyday at 9pm
+                reminderTime: new Date("April 11, 21 21:00:00"), // 9pm
             },
         ],
         dateAdded: new Date(),
@@ -165,13 +165,13 @@ test("correctly gets occurrences for a daily medication with multiple dosages", 
                 _id: "asdasdasd",
                 dose: 1,
                 sendReminder: true,
-                reminderTime: new Date("April 11, 21 09:00:00"), // everyday at 9am
+                reminderTime: new Date("April 11, 21 09:00:00"), // 9am
             },
             {
                 _id: "asdasdkm",
                 dose: 1,
                 sendReminder: true,
-                reminderTime: new Date("April 11, 21 21:00:00"), // everyday at 9pm
+                reminderTime: new Date("April 11, 21 21:00:00"), // 9pm
             },
         ],
         dateAdded: new Date(),

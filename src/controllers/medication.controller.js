@@ -122,7 +122,7 @@ export const getMedicationFromID = async (req, res) => {
         return res.status(404).json({ message: "Medication not found!" });
     }
 
-    await medication.populate("dosages").execPopulate();
+    await medication.populate("dosages inactiveDosages").execPopulate();
     return res.json(medication);
 };
 
@@ -472,7 +472,6 @@ export const getMedicationTrackingInfo = async (req, res) => {
                 path: "medications",
                 model: "Medication",
                 populate: {
-                    // not 100% percent sure if this syntax works
                     path: "dosages inactiveDosages",
                     model: "Dosage",
                     populate: { path: "occurrences", model: "Occurrence" },
@@ -523,7 +522,6 @@ export const getMedicationTrackingInfo = async (req, res) => {
                     ) {
                         // this handles the case when the occurrence was taken early and is within the last 30 days
                         takenOccurrences++;
-                        totalOccurrences++;
                     }
                 }
             }
