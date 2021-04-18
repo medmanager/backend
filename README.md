@@ -39,6 +39,8 @@ https://firebase.google.com and follow the instructions. Once in the firebase co
 
 #### Setup Twilio Account (Caregiver Alerts)
 
+This backend uses the Twilio API to send out text messages to caregvier contacts. In order to send out notifications, a secure Twilio account must be made. Navigate to https://twilio.com and follow the steps to create an account and create a Twilio project. From there, a dashboard screen should show the `ACCOUNT_SID` and `AUTH TOKEN` fields, which will be used to set up the environment variables in the next section. Make sure to obtain a number through the project dashboard as well, as the phone number through which text messages are sent needs to be outlined in the environment variables.
+
 #### Set Necessary Environment Variables
 
 **Note**: All prior steps need to be completed in order to fill out the environment variables.
