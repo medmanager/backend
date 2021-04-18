@@ -106,11 +106,13 @@ TODO: write troubleshooting steps
 -   User can now update the details of a medication or reschedule it's dosages using new times or frequencies. The previous dosage data will be saved in order to track compliance over time. Of course, the information will be verified before persisting.
 -   User can now stop taking a medication anytime they want. The data up until the point they stop taking the medication will be saved and continue to be used for tracking.
 -   User can now resume taking a medication anytime they want. The dosages will be rescheduled and the user will now get reminders if they have enabled them in the settings.
--   Medication dosage time notifications for iOS and Android
+-   Dosage reminders are now scheduled for each medication's occurrence in the current weeks time frame. The user has the ability to disable reminders on a per-dosage basis or turn off notifications entirely.
+-   Dosage reminders are now persisted when the server restarts.
 -   New API route which retrieves medication information along with its dosages.
 -   New API route which retrieves information necessary to get all the medications for a single notification.
 -   User can now access medication compliance data stored since they first added the medication.
--   User can now enable caregiver contact alerts from the settings which will be sent if the user does not take their medication within 6 hours of it's scheduled dosage time. The user can configure the name and phone number of the caregiver which will be alerted.
+-   User can now enable caregiver contact alerts from the settings which will be sent if the user does not take their medication within 6 hours of it's scheduled dosage time. The user can configure the name and phone number of the caregiver which will be alerted. By default, the caregiver contact will not be configured and thus, no alerts will be sent.
+-   Caregiver alerts are now scheduled 6 hours after the dosage reminder is delivered to the user. If the user has disabled caregiver alerts, then nothing will be scheduled.
 -   User can now configure settings to disable all notifications or to hide medication names in dosage reminders. By default, the names are hidden from the medication dosage reminders.
 -   User can now update the first name, last name, or email currently associated with their account.
 
@@ -122,7 +124,7 @@ TODO: write troubleshooting steps
 #### Known Bugs and Defects
 
 -   There is no way of resetting a users password.
--   There is no way of updating the amount of medication remaining
--   No handling of the event when a medication has no amount remaining when taken
--   No way of dynamically setting the JWT secret used to generate authentication tokens
--   No assurance that the create and schedule medication occurrences successfully created and scheduled the medication occurrence
+-   There is no way of updating the amount of medication remaining.
+-   No handling of the event when a medication has no amount remaining when taken.
+-   No way of dynamically setting the JWT secret used to generate authentication tokens.
+-   No assurance that the create and schedule medication occurrences successfully created and scheduled the medication occurrence.
