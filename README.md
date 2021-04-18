@@ -88,31 +88,38 @@ PORT=1337
 
 ### Troubleshooting
 
+TODO: write troubleshooting steps
+
 ## Release Notes
 
 ### v1.0
 
 #### Features
 
--   User registration
--   User authentication
--   Update user device info
--   Add medication
--   Delete medication
--   Edit medication details and schedule data
--   Stop taking medication
--   Resume taking medication
+-   User can now register a new account by providing their fist and last name, email, and a password.
+-   User can now login to their existing account by providing their email and password. If the email or password is incorrect, an error message will be displayed.
+-   User can now update their device operating system and token information via a new route.
+-   User can now add a new medication to their account. The medication will be verified before the data is persisted.
+-   User can now delete a medication from their account.
+-   User can now update the details of a medication or reschedule it's dosages using new times or frequencies. The previous dosage data will be saved in order to track compliance over time. Of course, the information will be verified before persisting.
+-   User can now stop taking a medication anytime they want. The data up until the point they stop taking the medication will be saved and continue to be used for tracking.
+-   User can now resume taking a medication anytime they want. The dosages will be rescheduled and the user will now get reminders if they have enabled them in the settings.
 -   Medication dosage time notifications for iOS and Android
--   Get user medication data
--   Get grouped medication dosage occurrence data
--   Get medication compliance tracking data
--   Caregiver contact alerts via text message
--   Update user notification settings
--   Update user caregiver contact settings
--   Update user account settings
+-   New API route which retrieves medication information along with its dosages.
+-   New API route which retrieves information necessary to get all the medications for a single notification.
+-   User can now access medication compliance data stored since they first added the medication.
+-   User can now enable caregiver contact alerts from the settings which will be sent if the user does not take their medication within 6 hours of it's scheduled dosage time. The user can configure the name and phone number of the caregiver which will be alerted.
+-   User can now configure settings to disable all notifications or to hide medication names in dosage reminders. By default, the names are hidden from the medication dosage reminders.
+-   User can now update the first name, last name, or email currently associated with their account.
+
+#### Fixes
+
+-   The server will no longer consider duplicate occurrences when scheduling occurrences for the current week.
+-   Weekly medications no longer contain incorrect occurrence times. Rescheduling a medication from daily to weekly is now possible!
 
 #### Known Bugs and Defects
 
+-   There is no way of resetting a users password.
 -   There is no way of updating the amount of medication remaining
 -   No handling of the event when a medication has no amount remaining when taken
 -   No way of dynamically setting the JWT secret used to generate authentication tokens
