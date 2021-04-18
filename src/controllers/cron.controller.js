@@ -44,6 +44,14 @@ export const sendDosageNotification = async (occurrenceGroupId) => {
             populate: { path: "medication", model: "Medication" },
         },
     });
+
+    if (!occurrenceGroup) {
+        console.error(
+            "Occurrence group not found. Unable to send notification."
+        );
+        return;
+    }
+
     let user = await User.findById(occurrenceGroup.user);
     //check that at least one of the occurrences belongs to a dosage that has sendReminder as true
     let shouldSendNotification = false;
@@ -155,7 +163,6 @@ export const sendDosageNotification = async (occurrenceGroupId) => {
         } else {
             console.log("Notification failed to send");
             console.log(options);
-            console.log(medication);
             for (const error of response.failed) {
                 console.error(error);
             }
