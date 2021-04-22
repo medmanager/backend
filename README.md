@@ -90,7 +90,19 @@ PORT=1337
 
 ### Troubleshooting
 
-TODO: write troubleshooting steps
+* If 'npm' command is not recognized:
+  * Have you installed nodejs correctly and added the path to your environment variables? Follow this link here for a brief tutorial on how to do so: https://www.tutorialspoint.com/nodejs/nodejs_environment_setup.htm
+* 'npm install' command has failed
+  * Try running 'npm cache clean'
+  * Use -verbose to view more details about the installation issue
+  * Make sure your npm version is up to date ('npm version')
+  * If you get an error for not having installed 'git', make sure to do so. Instructions can be found here: https://git-scm.com/book/en/v2/Getting-Started-Installing-Git
+  * Try deleting the node_modules folder if it exists, restart your computer, and try again
+* 'npm start' command has failed
+  * If the issue is a node_module concern, make sure you have ran 'npm install' recently
+  * Make sure you do not have another local server running on the same port specified in the .env file
+  * Try restarting your computer
+  * Try uninstalling and reinstalling node
 
 ## Release Notes
 
