@@ -1,3 +1,5 @@
+import mongoose from "mongoose";
+
 /**
  * Recursively check equality between two objects
  * @param {*} first First object
@@ -53,6 +55,14 @@ export const deepEqual = (first, second) => {
                 deepEqual(first[key], second[key])
             )
         );
+    }
+
+    if (
+        firstType === "string" &&
+        secondType === "object" &&
+        second instanceof mongoose.Types.ObjectId
+    ) {
+        return first === second.toString();
     }
 
     return first === second;

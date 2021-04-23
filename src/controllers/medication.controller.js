@@ -229,10 +229,10 @@ export const updateMedicationFromID = async (req, res) => {
     // we only want to compare certain values to see if the dosages or the frequency has changed
     const dosagesToCompare = medication.dosages.map(
         ({ _id, reminderTime, dose, sendReminder }) => ({
-            _id,
-            reminderTime,
             dose,
             sendReminder,
+            reminderTime,
+            _id,
         })
     );
 
