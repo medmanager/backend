@@ -10,7 +10,7 @@
 
 #### Setup Apple Developer Account (iOS Notifications)
 
-In order to send out notifications to iOS devices, the backend must be setup with a verified [Apple Developer Account](https://developer.apple.com/) enrolled in the [Apple Developer Progam](https://developer.apple.com/programs/) which has a 99 USD annual fee. To setup an account, simply navigate to https://developer.apple.com and create one. You should now be presented with the dashboard. Once you are there, please follow the steps outlined below:
+In order to send out notifications to iOS devices, the backend must be setup with a verified [Apple Developer Account](https://developer.apple.com/) enrolled in the [Apple Developer Program](https://developer.apple.com/programs/) which has a 99 USD annual fee. To setup an account, simply navigate to https://developer.apple.com and create one. You should now be presented with the dashboard. Once you are there, please follow the steps outlined below:
 
 1. First, navigate to `Membership` tab and take note of the `Team ID` field. We will use this value later on.
 
@@ -39,13 +39,13 @@ https://firebase.google.com and follow the instructions. Once in the firebase co
 
 #### Setup Twilio Account (Caregiver Alerts)
 
-This backend uses the Twilio API to send out text messages to caregvier contacts. In order to send out notifications, a secure Twilio account must be made. Navigate to https://twilio.com and follow the steps to create an account and create a Twilio project. From there, a dashboard screen should show the `ACCOUNT_SID` and `AUTH TOKEN` fields, which will be used to set up the environment variables in the next section. Make sure to obtain a number through the project dashboard as well, as the phone number through which text messages are sent needs to be outlined in the environment variables.
+This backend uses the Twilio API to send out text messages to caregiver contacts. In order to send out notifications, a secure Twilio account must be made. Navigate to https://twilio.com and follow the steps to create an account and create a Twilio project. From there, a dashboard screen should show the `ACCOUNT_SID` and `AUTH TOKEN` fields, which will be used to set up the environment variables in the next section. Make sure to obtain a number through the project dashboard as well, as the phone number through which text messages are sent needs to be outlined in the environment variables.
 
 #### Set Necessary Environment Variables
 
 **Note**: All prior steps need to be completed in order to fill out the environment variables.
 
-In order to setup the backend enviornment properly, you must set the required environment variables through a `.env` file at the root of the project. Please follow the steps outlined below:
+In order to setup the backend environment properly, you must set the required environment variables through a `.env` file at the root of the project. Please follow the steps outlined below:
 
 1. Create the file named `.env` at the root of the project.
 2. Copy the contents of the `.env.example` file into the newly created `.env` file.
@@ -62,7 +62,7 @@ git clone https://github.com/medmanager/backend.git
 
 ### Install Dependencies
 
-To install the project's depedencies, execute the following command at the root of the backend repository:
+To install the project's dependencies, execute the following command at the root of the backend repository:
 
 ```
 npm install
@@ -90,19 +90,19 @@ PORT=1337
 
 ### Troubleshooting
 
-* If 'npm' command is not recognized:
-  * Have you installed nodejs correctly and added the path to your environment variables? Follow this link here for a brief tutorial on how to do so: https://www.tutorialspoint.com/nodejs/nodejs_environment_setup.htm
-* 'npm install' command has failed
-  * Try running 'npm cache clean'
-  * Use -verbose to view more details about the installation issue
-  * Make sure your npm version is up to date ('npm version')
-  * If you get an error for not having installed 'git', make sure to do so. Instructions can be found here: https://git-scm.com/book/en/v2/Getting-Started-Installing-Git
-  * Try deleting the node_modules folder if it exists, restart your computer, and try again
-* 'npm start' command has failed
-  * If the issue is a node_module concern, make sure you have ran 'npm install' recently
-  * Make sure you do not have another local server running on the same port specified in the .env file
-  * Try restarting your computer
-  * Try uninstalling and reinstalling node
+-   If 'npm' command is not recognized:
+    -   Have you installed nodejs correctly and added the path to your environment variables? Follow this link here for a brief tutorial on how to do so: https://www.tutorialspoint.com/nodejs/nodejs_environment_setup.htm
+-   'npm install' command has failed
+    -   Try running 'npm cache clean'
+    -   Use -verbose to view more details about the installation issue
+    -   Make sure your npm version is up to date ('npm version')
+    -   If you get an error for not having installed 'git', make sure to do so. Instructions can be found here: https://git-scm.com/book/en/v2/Getting-Started-Installing-Git
+    -   Try deleting the node_modules folder if it exists, restart your computer, and try again
+-   'npm start' command has failed
+    -   If the issue is a node_module concern, make sure you have ran 'npm install' recently
+    -   Make sure you do not have another local server running on the same port specified in the .env file
+    -   Try restarting your computer
+    -   Try uninstalling and reinstalling node
 
 ## Release Notes
 
