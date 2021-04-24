@@ -367,13 +367,16 @@ export const createAndScheduleMedicationDosageOccurrences = async (
         if (isAfter(occurrence, now)) {
             // find dose object
             const dose = await Dosage.findById(dosageId);
+            const doses = await Dosage.find({medication: dose.medication});
+            const dosageIds = doses.map(dose => dose._id);
+            //find all dosages of the same medication that occur at the same time
             const existingOccurrence = await Occurrence.findOne({
-                dosage: dosageId,
+                dosage: {$in : dosageIds},
                 scheduledDate: occurrence,
             });
 
             // ensure that duplicated occurrences are not created
-            if (!existingOccurrence) {
+            if (!existingOccurrence || !existingOccurrence.isTaken) {
                 // create occurrence object
                 let occurrenceObject = new Occurrence({
                     isTaken: false,
