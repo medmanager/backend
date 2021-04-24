@@ -6,7 +6,7 @@ import Medication from "../models/Medication";
 import Occurrence from "../models/Occurrence";
 import OccurrenceGroup from "../models/OccurrenceGroup";
 import User from "../models/User";
-import { deepEqual } from "../utils";
+import { deepEqual, zip } from "../utils";
 import {
     createAndScheduleMedicationDosageOccurrences,
     descheduleAndDeleteFutureDosageOccurrences,
@@ -189,11 +189,35 @@ export const deactivateMedication = async (req, res) => {
         return res.send(err);
     }
     // mark medication as inactive
-    await descheduleAndDeleteFutureDosageOccurrences(medication);
+    await descheduleAndDeleteFutureDosageOccurrences(medication.dosages);
     await Medication.findByIdAndUpdate(medId, {
         active: false,
     });
     return res.status(200).json(medication);
+};
+
+/**
+ * Perform a diffing algorithm on the two lists of dosages
+ * @param {*} newDosages New dosages
+ * @param {*} originalDosages Original dosages
+ * @returns modified dosages and unchanged dosages
+ */
+export const diffDosages = (newDosages, originalDosages) => {
+    const modifiedDosages = [];
+    const unchangedDosages = [];
+
+    for (const [newDosage, originalDosage] of zip(
+        newDosages,
+        originalDosages
+    )) {
+        if (!deepEqual(newDosage, originalDosage)) {
+            modifiedDosages.push(newDosage);
+        } else {
+            unchangedDosages.push(originalDosage);
+        }
+    }
+
+    return [modifiedDosages, unchangedDosages];
 };
 
 export const updateMedicationFromID = async (req, res) => {
@@ -250,59 +274,102 @@ export const updateMedicationFromID = async (req, res) => {
         },
     };
 
-    if (
-        !deepEqual(updatedMedication.dosages, dosagesToCompare) ||
-        !deepEqual(updatedMedication.frequency, frequencyToCompare)
-    ) {
-        console.log("Dosages or frequency has changed");
-        // dosages or frequency have changed since last time, invalidate all previous dosages
-        await descheduleAndDeleteFutureDosageOccurrences(medication);
-        const inactiveDosages = medication.inactiveDosages.concat(
-            medication.dosages
-        );
-        const dosageIdsToInvalidate = inactiveDosages.map(
-            (dosage) => dosage._id
-        );
-        await Dosage.updateMany(
-            { _id: { $in: dosageIdsToInvalidate } },
-            { active: false, inactiveDate: new Date() }
-        );
+    const [modifiedDosages, unchangedDosages] = diffDosages(
+        updatedMedication.dosages,
+        dosagesToCompare
+    );
 
-        // NOTE: assume all dosages on the updated medication are new dosages
-        const newDosages = [];
-        for (const dosage of updatedMedication.dosages) {
-            const dosageObj = {
-                dose: dosage.dose,
-                sendReminder: dosage.sendReminder,
-                reminderTime: dosage.reminderTime,
-                active: true,
-                medication: medId,
-            };
-            const newDosage = new Dosage(dosageObj);
-            await newDosage.save();
-            newDosages.push(newDosage);
-        }
+    await descheduleAndDeleteFutureDosageOccurrences(modifiedDosages);
+    const inactiveDosages = medication.inactiveDosages.concat(modifiedDosages);
+    const dosageIdsToInvalidate = inactiveDosages.map((dosage) => dosage._id);
+    await Dosage.updateMany(
+        { _id: { $in: dosageIdsToInvalidate } },
+        { active: false, inactiveDate: new Date() }
+    );
 
-        medication.dosages = newDosages;
-        medication.inactiveDosages = inactiveDosages;
-        medication.frequency = updatedMedication.frequency;
-        medication.name = updatedMedication.name;
-        medication.strength = updatedMedication.strength;
-        medication.strengthUnit = updatedMedication.strengthUnit;
-        medication.amount = updatedMedication.amount;
-        medication.amountUnit = updatedMedication.amountUnit;
-        medication.color = updatedMedication.color;
-        await medication.save();
-        await createAndScheduleMedicationDosageOccurrences(medication);
-    } else {
-        medication.name = updatedMedication.name;
-        medication.strength = updatedMedication.strength;
-        medication.strengthUnit = updatedMedication.strengthUnit;
-        medication.amount = updatedMedication.amount;
-        medication.amountUnit = updatedMedication.amountUnit;
-        medication.color = updatedMedication.color;
-        await medication.save();
+    const newDosages = [...unchangedDosages]; // start off with the unchanged dosages already in the array
+    for (const dosage of modifiedDosages) {
+        const dosageObj = {
+            dose: dosage.dose,
+            sendReminder: dosage.sendReminder,
+            reminderTime: dosage.reminderTime,
+            active: true,
+            medication: medId,
+        };
+        const newDosage = new Dosage(dosageObj);
+        await newDosage.save();
+        newDosages.push(newDosage);
     }
+
+    medication.dosages = newDosages;
+    medication.inactiveDosages = inactiveDosages;
+    medication.frequency = updatedMedication.frequency;
+    medication.name = updatedMedication.name;
+    medication.strength = updatedMedication.strength;
+    medication.strengthUnit = updatedMedication.strengthUnit;
+    medication.amount = updatedMedication.amount;
+    medication.amountUnit = updatedMedication.amountUnit;
+    medication.color = updatedMedication.color;
+    await medication.save();
+
+    // TODO: if the frequency has not changed, schedule only the modified dosages
+    // TODO: if the frequency has changed, reschedule all dosages
+
+    // await createAndScheduleMedicationDosageOccurrences(medication);
+
+    // if (
+    //     !deepEqual(updatedMedication.dosages, dosagesToCompare) ||
+    //     !deepEqual(updatedMedication.frequency, frequencyToCompare)
+    // ) {
+    //     console.log("Dosages or frequency has changed");
+    //     // dosages or frequency have changed since last time, invalidate all previous dosages
+    //     await descheduleAndDeleteFutureDosageOccurrences(medication);
+    //     const inactiveDosages = medication.inactiveDosages.concat(
+    //         medication.dosages
+    //     );
+    //     const dosageIdsToInvalidate = inactiveDosages.map(
+    //         (dosage) => dosage._id
+    //     );
+    //     await Dosage.updateMany(
+    //         { _id: { $in: dosageIdsToInvalidate } },
+    //         { active: false, inactiveDate: new Date() }
+    //     );
+
+    //     // NOTE: assume all dosages on the updated medication are new dosages
+    //     const newDosages = [];
+    //     for (const dosage of updatedMedication.dosages) {
+    //         const dosageObj = {
+    //             dose: dosage.dose,
+    //             sendReminder: dosage.sendReminder,
+    //             reminderTime: dosage.reminderTime,
+    //             active: true,
+    //             medication: medId,
+    //         };
+    //         const newDosage = new Dosage(dosageObj);
+    //         await newDosage.save();
+    //         newDosages.push(newDosage);
+    //     }
+
+    //     medication.dosages = newDosages;
+    //     medication.inactiveDosages = inactiveDosages;
+    //     medication.frequency = updatedMedication.frequency;
+    //     medication.name = updatedMedication.name;
+    //     medication.strength = updatedMedication.strength;
+    //     medication.strengthUnit = updatedMedication.strengthUnit;
+    //     medication.amount = updatedMedication.amount;
+    //     medication.amountUnit = updatedMedication.amountUnit;
+    //     medication.color = updatedMedication.color;
+    //     await medication.save();
+    //     await createAndScheduleMedicationDosageOccurrences(medication);
+    // } else {
+    //     medication.name = updatedMedication.name;
+    //     medication.strength = updatedMedication.strength;
+    //     medication.strengthUnit = updatedMedication.strengthUnit;
+    //     medication.amount = updatedMedication.amount;
+    //     medication.amountUnit = updatedMedication.amountUnit;
+    //     medication.color = updatedMedication.color;
+    //     await medication.save();
+    // }
 
     return res.status(200).json(medication);
 };

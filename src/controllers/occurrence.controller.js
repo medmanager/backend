@@ -547,13 +547,11 @@ export const getWeeklyOccurrences = (
 };
 
 /**
- * Given a medication, deschedule and delete all of its future occurrences
- * @param {*} medication Medication document
+ * Given a list of dosages, deschedule and delete all of the future occurrences corresponding
+ * to these dosages
+ * @param {*} dosages Array of dosage documents
  */
-export const descheduleAndDeleteFutureDosageOccurrences = async (
-    medication
-) => {
-    const dosages = medication.dosages;
+export const descheduleAndDeleteFutureDosageOccurrences = async (dosages) => {
     const dosageIds = dosages.map((dosage) => dosage._id);
 
     for (let dosageId of dosageIds) {
