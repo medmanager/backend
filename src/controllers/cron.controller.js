@@ -64,7 +64,7 @@ export const sendDosageNotification = async (occurrenceGroupId) => {
         let emergencyJobId = mongoose.Types.ObjectId();
         occurrenceGroup.emergencyJobId = emergencyJobId;
         let dateToFire = new Date();
-        let waitingTime = 1000 * 60;
+        let waitingTime = 1000 * 20;
         dateToFire = new Date(dateToFire.getTime() + waitingTime);
         schedule.scheduleJob(emergencyJobId.toString(), dateToFire, () => {
             sendEmergencyContactAlert(occurrenceGroup._id);
@@ -306,5 +306,5 @@ const sendEmergencyContactAlert = async (occurrenceGroupId) => {
     }
 
     //delete occurrenceGroup (we don't need to remove the reference from each of the occurrences)
-    await OccurrenceGroup.findByIdAndDelete(occurrenceGroup._id);
+    // await OccurrenceGroup.findByIdAndDelete(occurrenceGroup._id);
 };
